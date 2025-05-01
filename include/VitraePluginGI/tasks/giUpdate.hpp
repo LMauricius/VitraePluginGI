@@ -1,0 +1,163 @@
+#pragma once
+
+#include "VitraePluginGI/data/Generation.hpp"
+#include "VitraePluginGI/data/Probe.hpp"
+
+#include "Vitrae/Assets/Model.hpp"
+#include "Vitrae/Collections/MethodCollection.hpp"
+#include "Vitrae/Data/BoundingBox.hpp"
+#include "Vitrae/Data/Transformation.hpp"
+#include "Vitrae/Params/Purposes.hpp"
+#include "Vitrae/Params/Standard.hpp"
+#include "Vitrae/Pipelines/Compositing/AdaptTasks.hpp"
+#include "Vitrae/Pipelines/Compositing/ClearRender.hpp"
+#include "Vitrae/Pipelines/Compositing/Compute.hpp"
+#include "Vitrae/Pipelines/Compositing/DataRender.hpp"
+#include "Vitrae/Pipelines/Compositing/FrameToTexture.hpp"
+#include "Vitrae/Pipelines/Compositing/Function.hpp"
+#include "Vitrae/Pipelines/Compositing/InitFunction.hpp"
+#include "Vitrae/Pipelines/Compositing/SceneRender.hpp"
+#include "Vitrae/Pipelines/Shading/Constant.hpp"
+#include "Vitrae/Pipelines/Shading/Header.hpp"
+#include "Vitrae/Pipelines/Shading/Snippet.hpp"
+#include "Vitrae/Util/StringProcessing.hpp"
+
+#include "dynasma/standalone.hpp"
+
+#include "MMeter.h"
+
+#include <iostream>
+
+namespace VitraePluginGI
+{
+using namespace Vitrae;
+
+inline void setupGIUpdate(ComponentRoot &root)
+{
+    MethodCollection &methodCollection = root.getComponent<MethodCollection>();
+
+    /*
+    COMPUTE SHADING
+    */
+
+    methodCollection.registerShaderTask(
+        root.getComponent<ShaderSnippetKeeper>().new_asset({ShaderSnippet::StringParams{
+            .inputSpecs =
+                {
+                    {"gpuProbeStates_prev", TYPE_INFO<ProbeStateBufferPtr>},
+                    {"gpuProbeStates", TYPE_INFO<ProbeStateBufferPtr>},
+                    {"gpuProbes", TYPE_INFO<ProbeBufferPtr>},
+                    {"gpuNeighborIndices", TYPE_INFO<NeighborIndexBufferPtr>},
+                    {"gpuReflectionTransfers", TYPE_INFO<ReflectionBufferPtr>},
+                    {"gpuNeighborTransfers", TYPE_INFO<NeighborTransferBufferPtr>},
+                    {"gpuNeighborFilters", TYPE_INFO<NeighborFilterBufferPtr>},
+                    {"gpuLeavingPremulFactors", TYPE_INFO<LeavingPremulFactorBufferPtr>},
+                    {"giWorldSize", TYPE_INFO<glm::vec3>},
+                    {"giGridSize", TYPE_INFO<glm::uvec3>},
+                    {"camera_position", TYPE_INFO<glm::vec3>},
+                    {"camera_light_strength", TYPE_INFO<float>, 50.0f},
+
+                    {"gi_utilities", TYPE_INFO<void>},
+                    {"swapped_probes", TYPE_INFO<void>},
+                },
+            .outputSpecs =
+                {
+                    {"updated_probes", TYPE_INFO<void>},
+                },
+            .snippet = R"glsl(
+                uint probeIndex = gl_GlobalInvocationID.x;
+                uint faceIndex = gl_GlobalInvocationID.y;
+
+                vec3 probeSize = gpuProbes[probeIndex].size;
+                vec3 probePos = gpuProbes[probeIndex].position;
+                uint neighborStartInd = gpuProbes[probeIndex].neighborSpecBufStart;
+                uint neighborCount = gpuProbes[probeIndex].neighborSpecCount;
+
+                // reflection
+                gpuProbeStates[probeIndex].illumination[faceIndex] = vec4(0.0);
+                //for (uint reflFaceIndex = 0; reflFaceIndex < 6; reflFaceIndex++) {
+                //    gpuProbeStates[probeIndex].illumination[faceIndex] += (
+                //        gpuProbeStates_prev[probeIndex].illumination[reflFaceIndex] *
+                //        gpuReflectionTransfers[probeIndex].face[reflFaceIndex]
+                //    );
+                //}
+            
+                // if camera is inside probe, glow
+                if (all(lessThan(abs(camera_position - probePos), probeSize * 0.5)) && faceIndex == 0) {
+                    gpuProbeStates[probeIndex].illumination[faceIndex] += vec4(camera_light_strength);
+                } else {
+                }
+                for (uint i = neighborStartInd; i < neighborStartInd + neighborCount; i++) {
+                    uint neighInd = gpuNeighborIndices[i];
+                    for (uint neighDirInd = 0; neighDirInd < 6; neighDirInd++) {
+                        gpuProbeStates[probeIndex].illumination[faceIndex] += (
+                            gpuProbeStates_prev[neighInd].illumination[neighDirInd] *
+                            gpuNeighborFilters[i] *
+                            gpuNeighborTransfers[i].source[neighDirInd].face[faceIndex] *
+                            gpuLeavingPremulFactors[neighInd].face[neighDirInd]
+                        );
+                    }
+                }
+
+                // just direct light from camera (debug)
+                /*gpuProbeStates[probeIndex].illumination[faceIndex] = vec4(vec3(
+                    max(min(
+                        dot(DIRECTIONS[faceIndex], normalize(camera_position - gpuProbes[probeIndex].position )) * 100.0 / 
+                        pow(distance(gpuProbes[probeIndex].position, camera_position), 2.0),
+                        1.0), 0.0)
+                ), 1.0);*/
+            )glsl",
+        }}),
+        ShaderStageFlag::Compute);
+
+    /*
+    COMPOSING
+    */
+    methodCollection.registerComposeTask(
+        dynasma::makeStandalone<ComposeFunction>(ComposeFunction::SetupParams{
+            .inputSpecs =
+                {
+                    {"gpuProbeStates", TYPE_INFO<ProbeStateBufferPtr>},
+                    {"generated_probe_transfers", TYPE_INFO<void>},
+                },
+            .outputSpecs =
+                {
+                    {"gpuProbeStates_prev", TYPE_INFO<ProbeStateBufferPtr>},
+                    {"gpuProbeStates", TYPE_INFO<ProbeStateBufferPtr>},
+                    {"swapped_probes", TYPE_INFO<void>},
+                },
+            .p_function =
+                [&root](const RenderComposeContext &context) {
+                    auto gpuProbeStates =
+                        context.properties.get("gpuProbeStates").get<ProbeStateBufferPtr>();
+                    ProbeStateBufferPtr gpuProbeStates_prev;
+
+                    // allocate the new buffer if we don't have it yet
+                    if (!context.properties.has("gpuProbeStates_prev")) {
+
+                        gpuProbeStates_prev = makeBuffer<void, G_ProbeState>(
+                            root,
+                            BufferUsageHint::HOST_INIT | BufferUsageHint::GPU_COMPUTE |
+                                BufferUsageHint::GPU_DRAW,
+                            gpuProbeStates.numElements());
+                        for (uint i = 0; i < gpuProbeStates.numElements(); i++) {
+                            for (uint j = 0; j < 6; j++) {
+                                gpuProbeStates_prev.getMutableElement(i).illumination[j] =
+                                    glm::vec4(0.0f);
+                            }
+                        }
+
+                        gpuProbeStates_prev.getRawBuffer()->synchronize();
+                    } else {
+                        gpuProbeStates_prev = context.properties.get("gpuProbeStates_prev")
+                                                  .get<ProbeStateBufferPtr>();
+                    }
+
+                    // swap buffers
+                    context.properties.set("gpuProbeStates_prev", gpuProbeStates);
+                    context.properties.set("gpuProbeStates", gpuProbeStates_prev);
+                },
+            .friendlyName = "Swap probe buffers",
+        }));
+}
+}; // namespace VitraePluginGI
