@@ -3,6 +3,12 @@
 #include "VitraePluginGI/data/Generation.hpp"
 #include "VitraePluginGI/data/Probe.hpp"
 
+#include "Vitrae/Collections/MethodCollection.hpp"
+#include "Vitrae/Data/BoundingBox.hpp"
+#include "Vitrae/Data/Transformation.hpp"
+#include "Vitrae/Params/Purposes.hpp"
+#include "Vitrae/Params/Standard.hpp"
+#include "Vitrae/Pipelines/Compositing/AdaptTasks.hpp"
 #include "Vitrae/Pipelines/Compositing/ClearRender.hpp"
 #include "Vitrae/Pipelines/Compositing/Compute.hpp"
 #include "Vitrae/Pipelines/Compositing/DataRender.hpp"
@@ -10,14 +16,11 @@
 #include "Vitrae/Pipelines/Compositing/Function.hpp"
 #include "Vitrae/Pipelines/Compositing/InitFunction.hpp"
 #include "Vitrae/Pipelines/Compositing/SceneRender.hpp"
-#include "Vitrae/Pipelines/Compositing/AdaptTasks.hpp"
 #include "Vitrae/Pipelines/Shading/Constant.hpp"
 #include "Vitrae/Pipelines/Shading/Header.hpp"
 #include "Vitrae/Pipelines/Shading/Snippet.hpp"
+#include "Vitrae/Assets/Model.hpp"
 #include "Vitrae/Util/StringProcessing.hpp"
-#include "Vitrae/Collections/MethodCollection.hpp"
-#include "Vitrae/Params/Standard.hpp"
-#include "Vitrae/Params/Purposes.hpp"
 
 #include "dynasma/standalone.hpp"
 
@@ -27,47 +30,47 @@
 
 namespace VitraePluginGI
 {
-    using namespace Vitrae;
+using namespace Vitrae;
 
-    inline void setupGI(ComponentRoot &root)
-    {
-        String friendlyName = "GlobalIllumination";
-        MethodCollection &methodCollection = root.getComponent<MethodCollection>();
+inline void setupGI(ComponentRoot &root)
+{
+    String friendlyName = "GlobalIllumination";
+    MethodCollection &methodCollection = root.getComponent<MethodCollection>();
 
-        /*
-        GENERIC SHADING
-        */
+    /*
+    GENERIC SHADING
+    */
 
-        methodCollection.registerShaderTask(
-            root.getComponent<ShaderHeaderKeeper>().new_asset({ShaderHeader::StringParams{
-                .inputSpecs = {},
-                .outputSpecs = {{"gi_utilities", TYPE_INFO<void>}},
-                .snippet = GLSL_PROBE_UTILITY_SNIPPET,
-                .friendlyName = "giConstants",
-            }}),
-            ShaderStageFlag::Fragment | ShaderStageFlag::Compute);
+    methodCollection.registerShaderTask(
+        root.getComponent<ShaderHeaderKeeper>().new_asset({ShaderHeader::StringParams{
+            .inputSpecs = {},
+            .outputSpecs = {{"gi_utilities", TYPE_INFO<void>}},
+            .snippet = GLSL_PROBE_UTILITY_SNIPPET,
+            .friendlyName = "giConstants",
+        }}),
+        ShaderStageFlag::Fragment | ShaderStageFlag::Compute);
 
-        /*
-        FRAGMENT SHADING
-        */
+    /*
+    FRAGMENT SHADING
+    */
 
-        methodCollection.registerShaderTask(
-            root.getComponent<ShaderSnippetKeeper>().new_asset({ShaderSnippet::StringParams{
-                .inputSpecs =
-                    {
-                        {"gpuProbes", TYPE_INFO<ProbeBufferPtr>},
-                        {"gpuProbeStates", TYPE_INFO<ProbeStateBufferPtr>},
-                        {"giWorldStart", TYPE_INFO<glm::vec3>},
-                        {"giWorldSize", TYPE_INFO<glm::vec3>},
-                        {"giGridSize", TYPE_INFO<glm::uvec3>},
-                        {"position_world", TYPE_INFO<glm::vec4>},
-                        {"normal_fragment_normalized", TYPE_INFO<glm::vec3>},
-                    },
-                .outputSpecs =
-                    {
-                        {"shade_gi_ambient", TYPE_INFO<glm::vec3>},
-                    },
-                .snippet = R"glsl(
+    methodCollection.registerShaderTask(
+        root.getComponent<ShaderSnippetKeeper>().new_asset({ShaderSnippet::StringParams{
+            .inputSpecs =
+                {
+                    {"gpuProbes", TYPE_INFO<ProbeBufferPtr>},
+                    {"gpuProbeStates", TYPE_INFO<ProbeStateBufferPtr>},
+                    {"giWorldStart", TYPE_INFO<glm::vec3>},
+                    {"giWorldSize", TYPE_INFO<glm::vec3>},
+                    {"giGridSize", TYPE_INFO<glm::uvec3>},
+                    {"position_world", TYPE_INFO<glm::vec4>},
+                    {"normal_fragment_normalized", TYPE_INFO<glm::vec3>},
+                },
+            .outputSpecs =
+                {
+                    {"shade_gi_ambient", TYPE_INFO<glm::vec3>},
+                },
+            .snippet = R"glsl(
                 uvec3 gridPos = uvec3(floor(
                     (position_world.xyz - giWorldStart) / giWorldSize * vec3(giGridSize)
                 ));
@@ -91,40 +94,40 @@ namespace VitraePluginGI
                         4 + int(normalIsNeg.z)
                     ].rgb * absNormal.z;
             )glsl",
-            }}),
-            ShaderStageFlag::Fragment | ShaderStageFlag::Compute);
+        }}),
+        ShaderStageFlag::Fragment | ShaderStageFlag::Compute);
 
-        methodCollection.registerPropertyOption("shade_ambient", "shade_gi_ambient");
+    methodCollection.registerPropertyOption("shade_ambient", "shade_gi_ambient");
 
-        /*
-        COMPUTE SHADING
-        */
+    /*
+    COMPUTE SHADING
+    */
 
-        methodCollection.registerShaderTask(
-            root.getComponent<ShaderSnippetKeeper>().new_asset({ShaderSnippet::StringParams{
-                .inputSpecs =
-                    {
-                        {"gpuProbeStates_prev", TYPE_INFO<ProbeStateBufferPtr>},
-                        {"gpuProbeStates", TYPE_INFO<ProbeStateBufferPtr>},
-                        {"gpuProbes", TYPE_INFO<ProbeBufferPtr>},
-                        {"gpuNeighborIndices", TYPE_INFO<NeighborIndexBufferPtr>},
-                        {"gpuReflectionTransfers", TYPE_INFO<ReflectionBufferPtr>},
-                        {"gpuNeighborTransfers", TYPE_INFO<NeighborTransferBufferPtr>},
-                        {"gpuNeighborFilters", TYPE_INFO<NeighborFilterBufferPtr>},
-                        {"gpuLeavingPremulFactors", TYPE_INFO<LeavingPremulFactorBufferPtr>},
-                        {"giWorldSize", TYPE_INFO<glm::vec3>},
-                        {"giGridSize", TYPE_INFO<glm::uvec3>},
-                        {"camera_position", TYPE_INFO<glm::vec3>},
-                        {"camera_light_strength", TYPE_INFO<float>, 50.0f},
+    methodCollection.registerShaderTask(
+        root.getComponent<ShaderSnippetKeeper>().new_asset({ShaderSnippet::StringParams{
+            .inputSpecs =
+                {
+                    {"gpuProbeStates_prev", TYPE_INFO<ProbeStateBufferPtr>},
+                    {"gpuProbeStates", TYPE_INFO<ProbeStateBufferPtr>},
+                    {"gpuProbes", TYPE_INFO<ProbeBufferPtr>},
+                    {"gpuNeighborIndices", TYPE_INFO<NeighborIndexBufferPtr>},
+                    {"gpuReflectionTransfers", TYPE_INFO<ReflectionBufferPtr>},
+                    {"gpuNeighborTransfers", TYPE_INFO<NeighborTransferBufferPtr>},
+                    {"gpuNeighborFilters", TYPE_INFO<NeighborFilterBufferPtr>},
+                    {"gpuLeavingPremulFactors", TYPE_INFO<LeavingPremulFactorBufferPtr>},
+                    {"giWorldSize", TYPE_INFO<glm::vec3>},
+                    {"giGridSize", TYPE_INFO<glm::uvec3>},
+                    {"camera_position", TYPE_INFO<glm::vec3>},
+                    {"camera_light_strength", TYPE_INFO<float>, 50.0f},
 
-                        {"gi_utilities", TYPE_INFO<void>},
-                        {"swapped_probes", TYPE_INFO<void>},
-                    },
-                .outputSpecs =
-                    {
-                        {"updated_probes", TYPE_INFO<void>},
-                    },
-                .snippet = R"glsl(
+                    {"gi_utilities", TYPE_INFO<void>},
+                    {"swapped_probes", TYPE_INFO<void>},
+                },
+            .outputSpecs =
+                {
+                    {"updated_probes", TYPE_INFO<void>},
+                },
+            .snippet = R"glsl(
                 uint probeIndex = gl_GlobalInvocationID.x;
                 uint faceIndex = gl_GlobalInvocationID.y;
 
@@ -167,42 +170,42 @@ namespace VitraePluginGI
                         1.0), 0.0)
                 ), 1.0);*/
             )glsl",
-            }}),
-            ShaderStageFlag::Compute);
+        }}),
+        ShaderStageFlag::Compute);
 
-        methodCollection.registerShaderTask(
-            root.getComponent<ShaderHeaderKeeper>().new_asset({ShaderHeader::StringParams{
-                .inputSpecs =
-                    {
-                        {"gi_utilities", TYPE_INFO<void>},
-                        {"gpuProbes", TYPE_INFO<ProbeBufferPtr>},
-                    },
-                .outputSpecs = {{"gi_probegen", TYPE_INFO<void>}},
-                .snippet = GLSL_PROBE_GEN_SNIPPET,
-                .friendlyName = "giConstants",
-            }}),
-            ShaderStageFlag::Compute);
+    methodCollection.registerShaderTask(
+        root.getComponent<ShaderHeaderKeeper>().new_asset({ShaderHeader::StringParams{
+            .inputSpecs =
+                {
+                    {"gi_utilities", TYPE_INFO<void>},
+                    {"gpuProbes", TYPE_INFO<ProbeBufferPtr>},
+                },
+            .outputSpecs = {{"gi_probegen", TYPE_INFO<void>}},
+            .snippet = GLSL_PROBE_GEN_SNIPPET,
+            .friendlyName = "giConstants",
+        }}),
+        ShaderStageFlag::Compute);
 
-        methodCollection.registerShaderTask(
-            root.getComponent<ShaderSnippetKeeper>().new_asset({ShaderSnippet::StringParams{
-                .inputSpecs =
-                    {
-                        {"giGridSize", TYPE_INFO<glm::uvec3>},
-                        {"gpuProbes", TYPE_INFO<ProbeBufferPtr>},
-                        {"gpuReflectionTransfers", TYPE_INFO<ReflectionBufferPtr>},
-                        {"gpuNeighborIndices", TYPE_INFO<NeighborIndexBufferPtr>},
-                        {"gpuNeighborTransfers", TYPE_INFO<NeighborTransferBufferPtr>},
-                        {"gpuNeighborFilters", TYPE_INFO<NeighborFilterBufferPtr>},
-                        {"gpuLeavingPremulFactors", TYPE_INFO<LeavingPremulFactorBufferPtr>},
+    methodCollection.registerShaderTask(
+        root.getComponent<ShaderSnippetKeeper>().new_asset({ShaderSnippet::StringParams{
+            .inputSpecs =
+                {
+                    {"giGridSize", TYPE_INFO<glm::uvec3>},
+                    {"gpuProbes", TYPE_INFO<ProbeBufferPtr>},
+                    {"gpuReflectionTransfers", TYPE_INFO<ReflectionBufferPtr>},
+                    {"gpuNeighborIndices", TYPE_INFO<NeighborIndexBufferPtr>},
+                    {"gpuNeighborTransfers", TYPE_INFO<NeighborTransferBufferPtr>},
+                    {"gpuNeighborFilters", TYPE_INFO<NeighborFilterBufferPtr>},
+                    {"gpuLeavingPremulFactors", TYPE_INFO<LeavingPremulFactorBufferPtr>},
 
-                        {"gi_utilities", TYPE_INFO<void>},
-                        {"gi_probegen", TYPE_INFO<void>},
-                    },
-                .outputSpecs =
-                    {
-                        {"generated_probe_transfers", TYPE_INFO<void>},
-                    },
-                .snippet = R"glsl(
+                    {"gi_utilities", TYPE_INFO<void>},
+                    {"gi_probegen", TYPE_INFO<void>},
+                },
+            .outputSpecs =
+                {
+                    {"generated_probe_transfers", TYPE_INFO<void>},
+                },
+            .snippet = R"glsl(
                 uint probeIndex = gl_GlobalInvocationID.x;
                 uint myDirInd = gl_GlobalInvocationID.y;
                 uvec3 gridPos = uvec3(
@@ -244,54 +247,48 @@ namespace VitraePluginGI
                     0.0, 0.0, 0.0, 0.0
                 );
             )glsl",
-            }}),
-            ShaderStageFlag::Compute);
+        }}),
+        ShaderStageFlag::Compute);
 
-        /*
-        COMPOSING
-        */
-        methodCollection.registerComposeTask(
-            dynasma::makeStandalone<ComposeFunction>(ComposeFunction::SetupParams{
-                .inputSpecs =
-                    {
-                        {"gpuProbeStates", TYPE_INFO<ProbeStateBufferPtr>},
-                        {"generated_probe_transfers", TYPE_INFO<void>},
-                    },
-                .outputSpecs =
-                    {
-                        {"gpuProbeStates_prev", TYPE_INFO<ProbeStateBufferPtr>},
-                        {"gpuProbeStates", TYPE_INFO<ProbeStateBufferPtr>},
-                        {"swapped_probes", TYPE_INFO<void>},
-                    },
-                .p_function =
-                    [&root](const RenderComposeContext &context)
+    /*
+    COMPOSING
+    */
+    methodCollection.registerComposeTask(
+        dynasma::makeStandalone<ComposeFunction>(ComposeFunction::SetupParams{
+            .inputSpecs =
                 {
+                    {"gpuProbeStates", TYPE_INFO<ProbeStateBufferPtr>},
+                    {"generated_probe_transfers", TYPE_INFO<void>},
+                },
+            .outputSpecs =
+                {
+                    {"gpuProbeStates_prev", TYPE_INFO<ProbeStateBufferPtr>},
+                    {"gpuProbeStates", TYPE_INFO<ProbeStateBufferPtr>},
+                    {"swapped_probes", TYPE_INFO<void>},
+                },
+            .p_function =
+                [&root](const RenderComposeContext &context) {
                     auto gpuProbeStates =
                         context.properties.get("gpuProbeStates").get<ProbeStateBufferPtr>();
                     ProbeStateBufferPtr gpuProbeStates_prev;
 
                     // allocate the new buffer if we don't have it yet
-                    if (!context.properties.has("gpuProbeStates_prev"))
-                    {
+                    if (!context.properties.has("gpuProbeStates_prev")) {
 
                         gpuProbeStates_prev = makeBuffer<void, G_ProbeState>(
                             root,
                             BufferUsageHint::HOST_INIT | BufferUsageHint::GPU_COMPUTE |
                                 BufferUsageHint::GPU_DRAW,
                             gpuProbeStates.numElements());
-                        for (uint i = 0; i < gpuProbeStates.numElements(); i++)
-                        {
-                            for (uint j = 0; j < 6; j++)
-                            {
+                        for (uint i = 0; i < gpuProbeStates.numElements(); i++) {
+                            for (uint j = 0; j < 6; j++) {
                                 gpuProbeStates_prev.getMutableElement(i).illumination[j] =
                                     glm::vec4(0.0f);
                             }
                         }
 
                         gpuProbeStates_prev.getRawBuffer()->synchronize();
-                    }
-                    else
-                    {
+                    } else {
                         gpuProbeStates_prev = context.properties.get("gpuProbeStates_prev")
                                                   .get<ProbeStateBufferPtr>();
                     }
@@ -300,60 +297,58 @@ namespace VitraePluginGI
                     context.properties.set("gpuProbeStates_prev", gpuProbeStates);
                     context.properties.set("gpuProbeStates", gpuProbeStates_prev);
                 },
-                .friendlyName = "Swap probe buffers",
-            }));
+            .friendlyName = "Swap probe buffers",
+        }));
 
-        methodCollection.registerComposeTask(
-            root.getComponent<ComposeComputeKeeper>().new_asset({ComposeCompute::SetupParams{
-                .root = root,
-                .outputSpecs =
-                    {
-                        {"generated_probe_transfers", TYPE_INFO<void>},
-                    },
-                .computeSetup =
-                    {
-                        .invocationCountX = {"gpuProbeCount"},
-                        .invocationCountY = 6,
-                        .groupSizeY = 6,
-                    },
-                .cacheResults = true,
-            }}));
-
-        methodCollection.registerComposeTask(root.getComponent<ComposeComputeKeeper>().new_asset(
-            {ComposeCompute::SetupParams{.root = root,
-                                         .outputSpecs =
-                                             {
-                                                 {"updated_probes", TYPE_INFO<void>},
-                                             },
-                                         .computeSetup = {
-                                             .invocationCountX = {"gpuProbeCount"},
-                                             .invocationCountY = 6,
-                                             .groupSizeY = 6,
-                                         }}}));
-        methodCollection.registerCompositorOutput("updated_probes");
-
-        auto p_visualScene = dynasma::makeStandalone<Scene>(Scene::FileLoadParams{
-            .root = root, .filepath = "../../VitraeShowcase/media/dataPoint/dataPoint.obj"});
-        auto p_visualModel = p_visualScene->modelProps[0].p_model;
-
-        methodCollection.registerComposeTask(
-            root.getComponent<ComposeDataRenderKeeper>().new_asset({ComposeDataRender::SetupParams{
-                .root = root,
-                .inputSpecs =
-                    {
-                        {"giSamples", TYPE_INFO<std::vector<Sample>>},
-                        {"display_cleared", TYPE_INFO<void>},
-                    },
-                .outputSpecs = {{"rendered_GI_samples", TYPE_INFO<void>}},
-                .p_dataPointModel = p_visualModel,
-                .dataGenerator =
-                    [](const RenderComposeContext &context,
-                       ComposeDataRender::RenderCallback callback)
+    methodCollection.registerComposeTask(
+        root.getComponent<ComposeComputeKeeper>().new_asset({ComposeCompute::SetupParams{
+            .root = root,
+            .outputSpecs =
                 {
+                    {"generated_probe_transfers", TYPE_INFO<void>},
+                },
+            .computeSetup =
+                {
+                    .invocationCountX = {"gpuProbeCount"},
+                    .invocationCountY = 6,
+                    .groupSizeY = 6,
+                },
+            .cacheResults = true,
+        }}));
+
+    methodCollection.registerComposeTask(root.getComponent<ComposeComputeKeeper>().new_asset(
+        {ComposeCompute::SetupParams{.root = root,
+                                     .outputSpecs =
+                                         {
+                                             {"updated_probes", TYPE_INFO<void>},
+                                         },
+                                     .computeSetup = {
+                                         .invocationCountX = {"gpuProbeCount"},
+                                         .invocationCountY = 6,
+                                         .groupSizeY = 6,
+                                     }}}));
+    methodCollection.registerCompositorOutput("updated_probes");
+
+    /*auto p_visualScene = dynasma::makeStandalone<Scene>(Scene::FileLoadParams{
+        .root = root, .filepath = "../VitraePluginGI/media/dataPoint/dataPoint.obj"});
+    auto p_visualModel = p_visualScene->modelProps.at(0).p_model;
+
+    methodCollection.registerComposeTask(
+        root.getComponent<ComposeDataRenderKeeper>().new_asset({ComposeDataRender::SetupParams{
+            .root = root,
+            .inputSpecs =
+                {
+                    {"giSamples", TYPE_INFO<std::vector<Sample>>},
+                    {"display_cleared", TYPE_INFO<void>},
+                },
+            .outputSpecs = {{"rendered_GI_samples", TYPE_INFO<void>}},
+            .p_dataPointModel = p_visualModel,
+            .dataGenerator =
+                [](const RenderComposeContext &context,
+                   ComposeDataRender::RenderCallback callback) {
                     auto &samples = context.properties.get("giSamples").get<std::vector<Sample>>();
 
-                    for (auto &sample : samples)
-                    {
+                    for (auto &sample : samples) {
                         SimpleTransformation trans;
                         trans.position = sample.position;
                         // trans.rotation = glm::quatLookAt(sample.normal, glm::vec3(0, 1, 0));
@@ -363,145 +358,55 @@ namespace VitraePluginGI
                         callback(trans.getModelMatrix());
                     }
                 },
-                .rasterizing = {
-                    .vertexPositionOutputPropertyName = "position_view",
-                    .modelFormPurpose = Purposes::visual,
-                }}}));
+            .rasterizing = {
+                .vertexPositionOutputPropertyName = "position_view",
+                .modelFormPurpose = Purposes::visual,
+            }}}));*/
 
-        methodCollection.registerComposeTask(dynasma::makeStandalone<ComposeAdaptTasks>(
-            ComposeAdaptTasks::SetupParams{.root = root,
-                                           .adaptorAliases =
-                                               {
-                                                   {"displayed_GI_samples", "rendered_GI_samples"},
-                                                   {"position_view", "position_camera_view"},
-                                                   {"fs_target", "fs_display"},
-                                               },
-                                           .desiredOutputs = {ParamSpec{
-                                               "displayed_GI_samples",
-                                               TYPE_INFO<void>,
-                                           }},
-                                           .friendlyName = "Render GI samples"}));
+    methodCollection.registerComposeTask(dynasma::makeStandalone<ComposeAdaptTasks>(
+        ComposeAdaptTasks::SetupParams{.root = root,
+                                       .adaptorAliases =
+                                           {
+                                               {"displayed_GI_samples", "rendered_GI_samples"},
+                                               {"position_view", "position_camera_view"},
+                                               {"fs_target", "fs_display"},
+                                           },
+                                       .desiredOutputs = {ParamSpec{
+                                           "displayed_GI_samples",
+                                           TYPE_INFO<void>,
+                                       }},
+                                       .friendlyName = "Render GI samples"}));
 
-        methodCollection.registerCompositorOutput("displayed_GI_samples");
+    methodCollection.registerCompositorOutput("displayed_GI_samples");
 
-        /*
-        SETUP
-        */
-        /// TODO: Support any renderer
-        {
-            MMETER_SCOPE_PROFILER("GI type specification");
+    /*
+    SETUP
+    */
 
-            OpenGLRenderer &rend = static_cast<OpenGLRenderer &>(root.getComponent<Renderer>());
-
-            rend.registerTypeConversion(
-                TYPE_INFO<Reflection>,
-                {.glTypeSpec = rend.specifyGlType({
-                     .valueTypeName = "Reflection",
-                     .structBodySnippet = clearIndents(GLSL_REFLECTION_DEF_SNIPPET),
-                     .layout =
-                         {
-                             .std140Size = 16 * 6,
-                             .std140Alignment = 16,
-                             .indexSize = 1 * 6,
-                         },
-                     .memberTypeDependencies =
-                         {&rend.getTypeConversion(TYPE_INFO<glm::vec4>).glTypeSpec},
-                 })});
-
-            rend.registerTypeConversion(
-                TYPE_INFO<FaceTransfer>,
-                {.glTypeSpec = rend.specifyGlType({
-                     .valueTypeName = "FaceTransfer",
-                     .structBodySnippet = clearIndents(GLSL_FACE_TRANSFER_DEF_SNIPPET),
-                     .layout =
-                         {
-                             .std140Size = 4 * 6,
-                             .std140Alignment = 4,
-                             .indexSize = 1 * 6,
-                         },
-                     .memberTypeDependencies = {&rend.getTypeConversion(TYPE_INFO<float>).glTypeSpec},
-                 })});
-
-            rend.registerTypeConversion(
-                TYPE_INFO<NeighborTransfer>,
-                {.glTypeSpec = rend.specifyGlType({
-                     .valueTypeName = "NeighborTransfer",
-                     .structBodySnippet = clearIndents(GLSL_NEIGHBOR_TRANSFER_DEF_SNIPPET),
-                     .layout =
-                         {
-                             .std140Size = 4 * 6 * 6,
-                             .std140Alignment = 4,
-                             .indexSize = 1 * 6 * 6,
-                         },
-                     .memberTypeDependencies =
-                         {&rend.getTypeConversion(TYPE_INFO<FaceTransfer>).glTypeSpec},
-                 })});
-
-            rend.registerTypeConversion(
-                TYPE_INFO<G_ProbeDefinition>,
-                {.glTypeSpec = rend.specifyGlType({
-                     .valueTypeName = "ProbeDefinition",
-                     .structBodySnippet = clearIndents(GLSL_PROBE_DEF_SNIPPET),
-                     .layout =
-                         {
-                             .std140Size = 32,
-                             .std140Alignment = 16,
-                             .indexSize = 4,
-                         },
-                     .memberTypeDependencies =
-                         {&rend.getTypeConversion(TYPE_INFO<glm::vec4>).glTypeSpec,
-                          &rend.getTypeConversion(TYPE_INFO<unsigned int>).glTypeSpec},
-                 })});
-
-            rend.registerTypeConversion(
-                TYPE_INFO<G_ProbeState>,
-                {.glTypeSpec = rend.specifyGlType({
-                     .valueTypeName = "ProbeState",
-                     .structBodySnippet = clearIndents(GLSL_PROBE_STATE_SNIPPET),
-                     .layout =
-                         {
-                             .std140Size = 16 * 6,
-                             .std140Alignment = 16,
-                             .indexSize = 6,
-                         },
-                     .memberTypeDependencies =
-                         {&rend.getTypeConversion(TYPE_INFO<glm::vec4>).glTypeSpec},
-                 })});
-
-            rend.specifyBufferTypeAndConversionAuto<ProbeBufferPtr>();
-            rend.specifyBufferTypeAndConversionAuto<ProbeStateBufferPtr>();
-            rend.specifyBufferTypeAndConversionAuto<ReflectionBufferPtr>();
-            rend.specifyBufferTypeAndConversionAuto<NeighborIndexBufferPtr>();
-            rend.specifyBufferTypeAndConversionAuto<NeighborTransferBufferPtr>();
-            rend.specifyBufferTypeAndConversionAuto<NeighborFilterBufferPtr>();
-            rend.specifyBufferTypeAndConversionAuto<LeavingPremulFactorBufferPtr>();
-        };
-
-        methodCollection.registerComposeTask(
-            dynasma::makeStandalone<ComposeInitFunction>(ComposeInitFunction::SetupParams{
-                .inputSpecs =
-                    {
-                        StandardParam::scene,
-                        {"numGISamples", TYPE_INFO<std::size_t>, (std::size_t)30000},
-                    },
-                .outputSpecs =
-                    {
-                        {"giSamples", TYPE_INFO<std::vector<Sample>>},
-                        {"gpuProbes", TYPE_INFO<ProbeBufferPtr>},
-                        {"gpuProbeStates", TYPE_INFO<ProbeStateBufferPtr>},
-                        {"gpuReflectionTransfers", TYPE_INFO<ReflectionBufferPtr>},
-                        {"gpuLeavingPremulFactors", TYPE_INFO<LeavingPremulFactorBufferPtr>},
-                        {"gpuNeighborIndices", TYPE_INFO<NeighborIndexBufferPtr>},
-                        {"gpuNeighborTransfers", TYPE_INFO<NeighborTransferBufferPtr>},
-                        {"gpuNeighborFilters", TYPE_INFO<NeighborFilterBufferPtr>},
-                        {"giWorldStart", TYPE_INFO<glm::vec3>},
-                        {"giWorldSize", TYPE_INFO<glm::vec3>},
-                        {"giGridSize", TYPE_INFO<glm::uvec3>},
-                        {"gpuProbecount", TYPE_INFO<std::uint32_t>},
-                    },
-                .p_function =
-                    [&root](const RenderComposeContext &context)
+    methodCollection.registerComposeTask(
+        dynasma::makeStandalone<ComposeInitFunction>(ComposeInitFunction::SetupParams{
+            .inputSpecs =
                 {
+                    StandardParam::scene,
+                    {"numGISamples", TYPE_INFO<std::size_t>, (std::size_t)30000},
+                },
+            .outputSpecs =
+                {
+                    {"giSamples", TYPE_INFO<std::vector<Sample>>},
+                    {"gpuProbes", TYPE_INFO<ProbeBufferPtr>},
+                    {"gpuProbeStates", TYPE_INFO<ProbeStateBufferPtr>},
+                    {"gpuReflectionTransfers", TYPE_INFO<ReflectionBufferPtr>},
+                    {"gpuLeavingPremulFactors", TYPE_INFO<LeavingPremulFactorBufferPtr>},
+                    {"gpuNeighborIndices", TYPE_INFO<NeighborIndexBufferPtr>},
+                    {"gpuNeighborTransfers", TYPE_INFO<NeighborTransferBufferPtr>},
+                    {"gpuNeighborFilters", TYPE_INFO<NeighborFilterBufferPtr>},
+                    {"giWorldStart", TYPE_INFO<glm::vec3>},
+                    {"giWorldSize", TYPE_INFO<glm::vec3>},
+                    {"giGridSize", TYPE_INFO<glm::uvec3>},
+                    {"gpuProbecount", TYPE_INFO<std::uint32_t>},
+                },
+            .p_function =
+                [&root](const RenderComposeContext &context) {
                     MMETER_SCOPE_PROFILER("GI setup");
 
                     std::size_t numGISamples =
@@ -513,8 +418,7 @@ namespace VitraePluginGI
                     BoundingBox sceneAABB =
                         transformed(scene.modelProps[0].transform.getModelMatrix(),
                                     scene.modelProps[0].p_model->getBoundingBox());
-                    for (const auto &modelProp : scene.modelProps)
-                    {
+                    for (const auto &modelProp : scene.modelProps) {
                         sceneAABB.merge(transformed(modelProp.transform.getModelMatrix(),
                                                     modelProp.p_model->getBoundingBox()));
                     }
@@ -564,10 +468,8 @@ namespace VitraePluginGI
                     // generateTransfers(probes, gpuNeighborTransfers, gpuNeighborFilters);
 
                     gpuProbeStates.resizeElements(probes.size());
-                    for (std::size_t i = 0; i < probes.size(); ++i)
-                    {
-                        for (std::size_t j = 0; j < 6; ++j)
-                        {
+                    for (std::size_t i = 0; i < probes.size(); ++i) {
+                        for (std::size_t j = 0; j < 6; ++j) {
                             gpuProbeStates.getMutableElement(i).illumination[j] = glm::vec4(0.0);
                         }
                     }
@@ -627,7 +529,7 @@ namespace VitraePluginGI
                         << " MB" << std::endl;
                     root.getInfoStream() << "=== /GI STATISTICS ===" << std::endl;
                 },
-                .friendlyName = "Setup probe buffers",
-            }));
-    }
-}; // namespace GI
+            .friendlyName = "Setup probe buffers",
+        }));
+}
+}; // namespace VitraePluginGI

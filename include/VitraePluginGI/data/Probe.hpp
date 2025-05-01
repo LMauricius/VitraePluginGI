@@ -2,15 +2,17 @@
 
 #include "Vitrae/Assets/BufferUtil/Ptr.hpp"
 #include "Vitrae/Data/Typedefs.hpp"
+#include "Vitrae/Dynamic/TypeMeta.hpp"
+#include "Vitrae/Dynamic/TypeMeta/Dependent.hpp"
+#include "Vitrae/Dynamic/TypeMeta/GLSLStruct.hpp"
+#include "Vitrae/Dynamic/TypeMeta/STD140Layout.hpp"
 #include "glm/glm.hpp"
 
 #include <span>
 #include <vector>
 
-namespace VitraePluginGI
+namespace Vitrae
 {
-using namespace Vitrae;
-
 inline constexpr glm::vec3 DIRECTIONS[] = {
     {1.0, 0.0, 0.0},  {-1.0, 0.0, 0.0}, {0.0, 1.0, 0.0},
     {0.0, -1.0, 0.0}, {0.0, 0.0, 1.0},  {0.0, 0.0, -1.0},
@@ -24,25 +26,37 @@ struct Reflection
 {
     glm::vec4 face[6]; // ind = to which face
 };
-inline constexpr const char *GLSL_REFLECTION_DEF_SNIPPET = R"glsl(
-    vec4 face[6];
-)glsl";
+template <>
+inline const CompoundTypeMeta TYPE_META<Reflection> = {
+    GLSLStructMeta{R"glsl(
+        vec4 face[6];
+    )glsl"},
+    STD140LayoutMeta{.std140Size = sizeof(Reflection), .std140Alignment = 16},
+};
 
 struct FaceTransfer
 {
     float face[6]; // ind = to which face
 };
-inline constexpr const char *GLSL_FACE_TRANSFER_DEF_SNIPPET = R"glsl(
-    float face[6];
-)glsl";
+template <>
+inline const CompoundTypeMeta TYPE_META<FaceTransfer> = {
+    GLSLStructMeta{R"glsl(
+        float face[6];
+    )glsl"},
+    STD140LayoutMeta{.std140Size = sizeof(FaceTransfer), .std140Alignment = 4}};
 
 struct NeighborTransfer
 {
     FaceTransfer source[6]; // ind = which neigh source
 };
-inline constexpr const char *GLSL_NEIGHBOR_TRANSFER_DEF_SNIPPET = R"glsl(
-    FaceTransfer source[6];
-)glsl";
+template <>
+inline const CompoundTypeMeta TYPE_META<NeighborTransfer> = {
+    GLSLStructMeta{.bodySnippet = R"glsl(
+        FaceTransfer source[6];
+    )glsl"},
+    STD140LayoutMeta{.std140Size = sizeof(NeighborTransfer), .std140Alignment = 4},
+    DependentMeta{.dependencyTypes = {TYPE_INFO<FaceTransfer>}},
+};
 
 /*
 Cpu structs
@@ -73,20 +87,28 @@ struct G_ProbeDefinition
     glm::vec3 size;
     std::uint32_t neighborSpecCount;
 };
-inline constexpr const char *GLSL_PROBE_DEF_SNIPPET = R"glsl(
-    vec3 position;
-    uint neighborSpecBufStart;
-    vec3 size;
-    uint neighborSpecCount;
-)glsl";
+template <>
+inline const CompoundTypeMeta TYPE_META<G_ProbeDefinition> = {
+    GLSLStructMeta{.bodySnippet = R"glsl(
+        vec3 position;
+        uint neighborSpecBufStart;
+        vec3 size;
+        uint neighborSpecCount;
+    )glsl"},
+    STD140LayoutMeta{.std140Size = sizeof(G_ProbeDefinition), .std140Alignment = 16},
+};
 
 struct G_ProbeState
 {
     glm::vec4 illumination[6];
 };
-inline constexpr const char *GLSL_PROBE_STATE_SNIPPET = R"glsl(
-    vec4 illumination[6];
-)glsl";
+template <>
+inline const CompoundTypeMeta TYPE_META<G_ProbeState> = {
+    GLSLStructMeta{.bodySnippet = R"glsl(
+        vec4 illumination[6];
+    )glsl"},
+    STD140LayoutMeta{.std140Size = sizeof(G_ProbeState), .std140Alignment = 4},
+};
 
 using ProbeBufferPtr = SharedBufferPtr<void, G_ProbeDefinition>;
 using ProbeStateBufferPtr = SharedBufferPtr<void, G_ProbeState>;
@@ -114,4 +136,4 @@ void convertHost2GpuBuffers(std::span<const H_ProbeDefinition> hostProbes, Probe
                             NeighborTransferBufferPtr gpuNeighborTransfers,
                             NeighborFilterBufferPtr gpuNeighborFilters);
 
-} // namespace GI
+} // namespace Vitrae

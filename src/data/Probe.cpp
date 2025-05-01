@@ -1,14 +1,14 @@
-#include "Probe.hpp"
+#include "VitraePluginGI/data/Probe.hpp"
 
 #include "MMeter.h"
 
-void VitraePluginGI::convertHost2GpuBuffers(std::span<const H_ProbeDefinition> hostProbes,
-                                            ProbeBufferPtr gpuProbes,
-                                            ReflectionBufferPtr gpuReflectionTransfers,
-                                            LeavingPremulFactorBufferPtr gpuLeavingPremulFactors,
-                                            NeighborIndexBufferPtr gpuNeighborIndices,
-                                            NeighborTransferBufferPtr gpuNeighborTransfers,
-                                            NeighborFilterBufferPtr gpuNeighborFilters)
+void Vitrae::convertHost2GpuBuffers(std::span<const H_ProbeDefinition> hostProbes,
+                                    ProbeBufferPtr gpuProbes,
+                                    ReflectionBufferPtr gpuReflectionTransfers,
+                                    LeavingPremulFactorBufferPtr gpuLeavingPremulFactors,
+                                    NeighborIndexBufferPtr gpuNeighborIndices,
+                                    NeighborTransferBufferPtr gpuNeighborTransfers,
+                                    NeighborFilterBufferPtr gpuNeighborFilters)
 {
     MMETER_FUNC_PROFILER;
 

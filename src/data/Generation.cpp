@@ -1,6 +1,6 @@
-#include "Generation.hpp"
-#include "../../Standard/Params.hpp"
-#include "../../Standard/Textures.hpp"
+#include "VitraePluginGI/data/Generation.hpp"
+#include "VitraePluginPhongShading/Standard/Params.hpp"
+#include "VitraePluginPhongShading/Standard/Textures.hpp"
 
 #include "Vitrae/Assets/Material.hpp"
 #include "Vitrae/Assets/Model.hpp"
@@ -139,8 +139,8 @@ void prepareScene(const Scene &scene, SamplingScene &smpScene, std::size_t &stat
 {
     MMETER_SCOPE_PROFILER("GI::prepareScene");
 
-    StringId texDiffuseNameId = "tex_" + std::string(VitraeCommon::StandardTexture::diffuse);
-    StringId colDiffuseNameId = "color_" + std::string(VitraeCommon::StandardTexture::diffuse);
+    StringId texDiffuseNameId = "tex_" + std::string(VitraePluginPhongShading::StandardTexture::diffuse);
+    StringId colDiffuseNameId = "color_" + std::string(VitraePluginPhongShading::StandardTexture::diffuse);
 
     Vitrae::LoDSelectionParams lodParams{
         .method = LoDSelectionMethod::Maximum,
