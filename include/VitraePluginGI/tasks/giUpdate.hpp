@@ -117,14 +117,16 @@ inline void setupGIUpdate(ComponentRoot &root)
         dynasma::makeStandalone<ComposeFunction>(ComposeFunction::SetupParams{
             .inputSpecs =
                 {
-                    {"gpuProbeStates", TYPE_INFO<ProbeStateBufferPtr>},
                     {"generated_probe_transfers", TYPE_INFO<void>},
                 },
             .outputSpecs =
                 {
-                    {"gpuProbeStates_prev", TYPE_INFO<ProbeStateBufferPtr>},
-                    {"gpuProbeStates", TYPE_INFO<ProbeStateBufferPtr>},
                     {"swapped_probes", TYPE_INFO<void>},
+                },
+            .filterSpecs =
+                {
+                    {"gpuProbeStates", TYPE_INFO<ProbeStateBufferPtr>},
+                    {"gpuProbeStates_prev", TYPE_INFO<ProbeStateBufferPtr>},
                 },
             .p_function =
                 [&root](const RenderComposeContext &context) {
