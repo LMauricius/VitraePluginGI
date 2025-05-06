@@ -75,8 +75,8 @@ const char *const GLSL_PROBE_GEN_SNIPPET = R"glsl(
         // Since the total leaving amounts get normalized,
         // the shared scalings (such as pi^2 constants) get nullified.
 
-        vec3 srcCenter = gpuProbes[srcProbeindex].position;
-        vec3 wallCenter = gpuProbes[dstProbeindex].position + DIRECTIONS[dstDirIndex] * gpuProbes[dstProbeindex].size / 2.0;
+        vec3 srcCenter = new_gpuProbes[srcProbeindex].position;
+        vec3 wallCenter = new_gpuProbes[dstProbeindex].position + DIRECTIONS[dstDirIndex] * new_gpuProbes[dstProbeindex].size / 2.0;
 
         vec3 src2wallOffset = wallCenter - srcCenter;
         float src2wallDist = length(src2wallOffset);
@@ -91,7 +91,7 @@ const char *const GLSL_PROBE_GEN_SNIPPET = R"glsl(
 
         float wallSize = 1.0;
         {
-            vec3 wallDiag = (vec3(1.0) - abs(DIRECTIONS[dstDirIndex])) * gpuProbes[dstProbeindex].size;
+            vec3 wallDiag = (vec3(1.0) - abs(DIRECTIONS[dstDirIndex])) * new_gpuProbes[dstProbeindex].size;
             vec3 wallDiagNon0 = wallDiag + abs(DIRECTIONS[dstDirIndex]);
             wallSize = wallDiagNon0.x * wallDiagNon0.y * wallDiagNon0.z;
         }

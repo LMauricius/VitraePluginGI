@@ -14,7 +14,7 @@
 #include "Vitrae/Pipelines/Compositing/DataRender.hpp"
 #include "Vitrae/Pipelines/Compositing/FrameToTexture.hpp"
 #include "Vitrae/Pipelines/Compositing/Function.hpp"
-#include "Vitrae/Pipelines/Compositing/InitFunction.hpp"
+#include "Vitrae/Pipelines/Compositing/CacheTasks.hpp"
 #include "Vitrae/Pipelines/Compositing/SceneRender.hpp"
 #include "Vitrae/Pipelines/Shading/Constant.hpp"
 #include "Vitrae/Pipelines/Shading/Header.hpp"
@@ -45,7 +45,7 @@ inline void setupGIGeneration(ComponentRoot &root)
             .inputSpecs = {},
             .outputSpecs = {{"gi_utilities", TYPE_INFO<void>}},
             .snippet = GLSL_PROBE_UTILITY_SNIPPET,
-            .friendlyName = "giConstants",
+            .friendlyName = "GI constants",
         }}),
         ShaderStageFlag::Fragment | ShaderStageFlag::Compute);
 
@@ -58,11 +58,11 @@ inline void setupGIGeneration(ComponentRoot &root)
             .inputSpecs =
                 {
                     {"gi_utilities", TYPE_INFO<void>},
-                    {"gpuProbes", TYPE_INFO<ProbeBufferPtr>},
+                    {"new_gpuProbes", TYPE_INFO<ProbeBufferPtr>},
                 },
             .outputSpecs = {{"gi_probegen", TYPE_INFO<void>}},
             .snippet = GLSL_PROBE_GEN_SNIPPET,
-            .friendlyName = "giConstants",
+            .friendlyName = "GI generation utils",
         }}),
         ShaderStageFlag::Compute);
 
@@ -70,45 +70,45 @@ inline void setupGIGeneration(ComponentRoot &root)
         root.getComponent<ShaderSnippetKeeper>().new_asset({ShaderSnippet::StringParams{
             .inputSpecs =
                 {
-                    {"giGridSize", TYPE_INFO<glm::uvec3>},
-                    {"gpuProbes", TYPE_INFO<ProbeBufferPtr>},
-                    {"gpuReflectionTransfers", TYPE_INFO<ReflectionBufferPtr>},
-                    {"gpuNeighborIndices", TYPE_INFO<NeighborIndexBufferPtr>},
-                    {"gpuNeighborTransfers", TYPE_INFO<NeighborTransferBufferPtr>},
-                    {"gpuNeighborFilters", TYPE_INFO<NeighborFilterBufferPtr>},
-                    {"gpuLeavingPremulFactors", TYPE_INFO<LeavingPremulFactorBufferPtr>},
+                    {"new_giGridSize", TYPE_INFO<glm::uvec3>},
+                    {"new_gpuProbes", TYPE_INFO<ProbeBufferPtr>},
+                    {"new_gpuReflectionTransfers", TYPE_INFO<ReflectionBufferPtr>},
+                    {"new_gpuNeighborIndices", TYPE_INFO<NeighborIndexBufferPtr>},
+                    {"new_gpuNeighborTransfers", TYPE_INFO<NeighborTransferBufferPtr>},
+                    {"new_gpuNeighborFilters", TYPE_INFO<NeighborFilterBufferPtr>},
+                    {"new_gpuLeavingPremulFactors", TYPE_INFO<LeavingPremulFactorBufferPtr>},
 
                     {"gi_utilities", TYPE_INFO<void>},
                     {"gi_probegen", TYPE_INFO<void>},
                 },
             .outputSpecs =
                 {
-                    {"generated_probe_transfers", TYPE_INFO<void>},
+                    {"new_generated_probe_transfers", TYPE_INFO<void>},
                 },
             .snippet = R"glsl(
                 uint probeIndex = gl_GlobalInvocationID.x;
                 uint myDirInd = gl_GlobalInvocationID.y;
                 uvec3 gridPos = uvec3(
-                    probeIndex / giGridSize.y / giGridSize.z,
-                    (probeIndex / giGridSize.z) % giGridSize.y,
-                    probeIndex % giGridSize.z
+                    probeIndex / new_giGridSize.y / new_giGridSize.z,
+                    (probeIndex / new_giGridSize.z) % new_giGridSize.y,
+                    probeIndex % new_giGridSize.z
                 );
 
-                uint neighborStartInd = gpuProbes[probeIndex].neighborSpecBufStart;
-                uint neighborCount = gpuProbes[probeIndex].neighborSpecCount;
+                uint neighborStartInd = new_gpuProbes[probeIndex].neighborSpecBufStart;
+                uint neighborCount = new_gpuProbes[probeIndex].neighborSpecCount;
 
                 float totalLeaving = 0.0;
                 for (uint i = neighborStartInd; i < neighborStartInd + neighborCount; i++) {
-                    uint neighInd = gpuNeighborIndices[i];
+                    uint neighInd = new_gpuNeighborIndices[i];
                     for (uint neighDirInd = 0; neighDirInd < 6; neighDirInd++) {
-                        if (all(lessThan(gridPos, giGridSize-2)) &&
+                        if (all(lessThan(gridPos, new_giGridSize-2)) &&
                             all(greaterThan(gridPos, uvec3(1)))) {
                             
-                            gpuNeighborFilters[i] = vec4(1.0);
+                            new_gpuNeighborFilters[i] = vec4(1.0);
                         } else {
-                            gpuNeighborFilters[i] = vec4(0);
+                            new_gpuNeighborFilters[i] = vec4(0);
                         }
-                        gpuNeighborTransfers[i].
+                        new_gpuNeighborTransfers[i].
                             source[neighDirInd].face[myDirInd] =
                             factorTo(neighInd, probeIndex, neighDirInd, myDirInd);
                         totalLeaving +=
@@ -117,13 +117,13 @@ inline void setupGIGeneration(ComponentRoot &root)
                 }
 
                 if (totalLeaving > 0.05) {
-                    gpuLeavingPremulFactors[probeIndex].face[myDirInd] = 0.95 / totalLeaving;
+                    new_gpuLeavingPremulFactors[probeIndex].face[myDirInd] = 0.95 / totalLeaving;
                 } else {
-                    gpuLeavingPremulFactors[probeIndex].face[myDirInd] = 0.0;
+                    new_gpuLeavingPremulFactors[probeIndex].face[myDirInd] = 0.0;
                 }
 
                 // reflection
-                gpuReflectionTransfers[probeIndex].face[myDirInd] = vec4(
+                new_gpuReflectionTransfers[probeIndex].face[myDirInd] = vec4(
                     0.0, 0.0, 0.0, 0.0
                 );
             )glsl",
@@ -139,29 +139,16 @@ inline void setupGIGeneration(ComponentRoot &root)
             .root = root,
             .outputSpecs =
                 {
-                    {"generated_probe_transfers", TYPE_INFO<void>},
+                    {"new_generated_probe_transfers", TYPE_INFO<void>},
                 },
             .computeSetup =
                 {
-                    .invocationCountX = {"gpuProbeCount"},
+                    .invocationCountX = {"new_gpuProbeCount"},
                     .invocationCountY = 6,
                     .groupSizeY = 6,
                 },
-            .cacheResults = true,
+            .cacheResults = false,
         }}));
-
-    methodCollection.registerComposeTask(root.getComponent<ComposeComputeKeeper>().new_asset(
-        {ComposeCompute::SetupParams{.root = root,
-                                     .outputSpecs =
-                                         {
-                                             {"updated_probes", TYPE_INFO<void>},
-                                         },
-                                     .computeSetup = {
-                                         .invocationCountX = {"gpuProbeCount"},
-                                         .invocationCountY = 6,
-                                         .groupSizeY = 6,
-                                     }}}));
-    methodCollection.registerCompositorOutput("updated_probes");
 
     /*auto p_visualScene = dynasma::makeStandalone<Scene>(Scene::FileLoadParams{
         .root = root, .filepath = "../VitraePluginGI/media/dataPoint/dataPoint.obj"});
@@ -218,7 +205,7 @@ inline void setupGIGeneration(ComponentRoot &root)
     */
 
     methodCollection.registerComposeTask(
-        dynasma::makeStandalone<ComposeInitFunction>(ComposeInitFunction::SetupParams{
+        dynasma::makeStandalone<ComposeFunction>(ComposeFunction::SetupParams{
             .inputSpecs =
                 {
                     StandardParam::scene,
@@ -226,18 +213,18 @@ inline void setupGIGeneration(ComponentRoot &root)
                 },
             .outputSpecs =
                 {
-                    {"giSamples", TYPE_INFO<std::vector<Sample>>},
-                    {"gpuProbes", TYPE_INFO<ProbeBufferPtr>},
-                    {"gpuProbeStates", TYPE_INFO<ProbeStateBufferPtr>},
-                    {"gpuReflectionTransfers", TYPE_INFO<ReflectionBufferPtr>},
-                    {"gpuLeavingPremulFactors", TYPE_INFO<LeavingPremulFactorBufferPtr>},
-                    {"gpuNeighborIndices", TYPE_INFO<NeighborIndexBufferPtr>},
-                    {"gpuNeighborTransfers", TYPE_INFO<NeighborTransferBufferPtr>},
-                    {"gpuNeighborFilters", TYPE_INFO<NeighborFilterBufferPtr>},
-                    {"giWorldStart", TYPE_INFO<glm::vec3>},
-                    {"giWorldSize", TYPE_INFO<glm::vec3>},
-                    {"giGridSize", TYPE_INFO<glm::uvec3>},
-                    {"gpuProbecount", TYPE_INFO<std::uint32_t>},
+                    {"new_giSamples", TYPE_INFO<std::vector<Sample>>},
+                    {"new_gpuProbes", TYPE_INFO<ProbeBufferPtr>},
+                    {"new_gpuProbeStates", TYPE_INFO<ProbeStateBufferPtr>},
+                    {"new_gpuReflectionTransfers", TYPE_INFO<ReflectionBufferPtr>},
+                    {"new_gpuLeavingPremulFactors", TYPE_INFO<LeavingPremulFactorBufferPtr>},
+                    {"new_gpuNeighborIndices", TYPE_INFO<NeighborIndexBufferPtr>},
+                    {"new_gpuNeighborTransfers", TYPE_INFO<NeighborTransferBufferPtr>},
+                    {"new_gpuNeighborFilters", TYPE_INFO<NeighborFilterBufferPtr>},
+                    {"new_giWorldStart", TYPE_INFO<glm::vec3>},
+                    {"new_giWorldSize", TYPE_INFO<glm::vec3>},
+                    {"new_giGridSize", TYPE_INFO<glm::uvec3>},
+                    {"new_gpuProbeCount", TYPE_INFO<std::uint32_t>},
                 },
             .p_function =
                 [&root](const RenderComposeContext &context) {
@@ -317,18 +304,19 @@ inline void setupGIGeneration(ComponentRoot &root)
                     gpuNeighborFilters.getRawBuffer()->synchronize();
 
                     // store properties
-                    context.properties.set("giSamples", samples);
-                    context.properties.set("gpuProbes", gpuProbes);
-                    context.properties.set("gpuProbeStates", gpuProbeStates);
-                    context.properties.set("gpuReflectionTransfers", gpuReflectionTransfers);
-                    context.properties.set("gpuLeavingPremulFactors", gpuLeavingPremulFactors);
-                    context.properties.set("gpuNeighborIndices", gpuNeighborIndices);
-                    context.properties.set("gpuNeighborTransfers", gpuNeighborTransfers);
-                    context.properties.set("gpuNeighborFilters", gpuNeighborFilters);
-                    context.properties.set("giWorldStart", worldStart);
-                    context.properties.set("giWorldSize", sceneAABB.getExtent());
-                    context.properties.set("giGridSize", gridSize);
-                    context.properties.set("gpuProbeCount", (std::uint32_t)gpuProbes.numElements());
+                    context.properties.set("new_giSamples", samples);
+                    context.properties.set("new_gpuProbes", gpuProbes);
+                    context.properties.set("new_gpuProbeStates", gpuProbeStates);
+                    context.properties.set("new_gpuReflectionTransfers", gpuReflectionTransfers);
+                    context.properties.set("new_gpuLeavingPremulFactors", gpuLeavingPremulFactors);
+                    context.properties.set("new_gpuNeighborIndices", gpuNeighborIndices);
+                    context.properties.set("new_gpuNeighborTransfers", gpuNeighborTransfers);
+                    context.properties.set("new_gpuNeighborFilters", gpuNeighborFilters);
+                    context.properties.set("new_giWorldStart", worldStart);
+                    context.properties.set("new_giWorldSize", sceneAABB.getExtent());
+                    context.properties.set("new_giGridSize", gridSize);
+                    context.properties.set("new_gpuProbeCount",
+                                           (std::uint32_t)gpuProbes.numElements());
 
                     // Print stats
                     root.getInfoStream() << "=== GI STATISTICS ===" << std::endl;
@@ -365,5 +353,42 @@ inline void setupGIGeneration(ComponentRoot &root)
                 },
             .friendlyName = "Setup probe buffers",
         }));
+
+    methodCollection.registerComposeTask(
+        dynasma::makeStandalone<ComposeCacheTasks>(ComposeCacheTasks::SetupParams{
+            .root = root,
+            .adaptorAliases =
+                {
+                    {"giSamples", "new_giSamples"},
+                    {"gpuProbes", "new_gpuProbes"},
+                    {"gpuProbeStates", "new_gpuProbeStates"},
+                    {"gpuReflectionTransfers", "new_gpuReflectionTransfers"},
+                    {"gpuLeavingPremulFactors", "new_gpuLeavingPremulFactors"},
+                    {"gpuNeighborIndices", "new_gpuNeighborIndices"},
+                    {"gpuNeighborTransfers", "new_gpuNeighborTransfers"},
+                    {"gpuNeighborFilters", "new_gpuNeighborFilters"},
+                    {"giWorldStart", "new_giWorldStart"},
+                    {"giWorldSize", "new_giWorldSize"},
+                    {"giGridSize", "new_giGridSize"},
+                    {"gpuProbeCount", "new_gpuProbeCount"},
+                    {"generated_probe_transfers", "new_generated_probe_transfers"},
+                },
+            .desiredOutputs =
+                {
+                    {"giSamples", TYPE_INFO<std::vector<Sample>>},
+                    {"gpuProbes", TYPE_INFO<ProbeBufferPtr>},
+                    {"gpuProbeStates", TYPE_INFO<ProbeStateBufferPtr>},
+                    {"gpuReflectionTransfers", TYPE_INFO<ReflectionBufferPtr>},
+                    {"gpuLeavingPremulFactors", TYPE_INFO<LeavingPremulFactorBufferPtr>},
+                    {"gpuNeighborIndices", TYPE_INFO<NeighborIndexBufferPtr>},
+                    {"gpuNeighborTransfers", TYPE_INFO<NeighborTransferBufferPtr>},
+                    {"gpuNeighborFilters", TYPE_INFO<NeighborFilterBufferPtr>},
+                    {"giWorldStart", TYPE_INFO<glm::vec3>},
+                    {"giWorldSize", TYPE_INFO<glm::vec3>},
+                    {"giGridSize", TYPE_INFO<glm::uvec3>},
+                    {"gpuProbeCount", TYPE_INFO<std::uint32_t>},
+                    {"generated_probe_transfers", TYPE_INFO<void>},
+                },
+            .friendlyName = "Prepare GI data"}));
 }
 }; // namespace VitraePluginGI

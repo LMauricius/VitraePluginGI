@@ -159,5 +159,18 @@ inline void setupGIUpdate(ComponentRoot &root)
                 },
             .friendlyName = "Swap probe buffers",
         }));
+
+    methodCollection.registerComposeTask(root.getComponent<ComposeComputeKeeper>().new_asset(
+        {ComposeCompute::SetupParams{.root = root,
+                                     .outputSpecs =
+                                         {
+                                             {"updated_probes", TYPE_INFO<void>},
+                                         },
+                                     .computeSetup = {
+                                         .invocationCountX = {"gpuProbeCount"},
+                                         .invocationCountY = 6,
+                                         .groupSizeY = 6,
+                                     }}}));
+    methodCollection.registerCompositorOutput("updated_probes");
 }
 }; // namespace VitraePluginGI
