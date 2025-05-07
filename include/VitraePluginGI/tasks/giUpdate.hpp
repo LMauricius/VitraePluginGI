@@ -45,7 +45,6 @@ inline void setupGIUpdate(ComponentRoot &root)
             .inputSpecs =
                 {
                     {"gpuProbeStates_prev", TYPE_INFO<ProbeStateBufferPtr>},
-                    {"gpuProbeStates", TYPE_INFO<ProbeStateBufferPtr>},
                     {"gpuProbes", TYPE_INFO<ProbeBufferPtr>},
                     {"gpuNeighborIndices", TYPE_INFO<NeighborIndexBufferPtr>},
                     {"gpuReflectionTransfers", TYPE_INFO<ReflectionBufferPtr>},
@@ -63,6 +62,10 @@ inline void setupGIUpdate(ComponentRoot &root)
             .outputSpecs =
                 {
                     {"updated_probes", TYPE_INFO<void>},
+                },
+            .filterSpecs =
+                {
+                    {"gpuProbeStates", TYPE_INFO<ProbeStateBufferPtr>},
                 },
             .snippet = R"glsl(
                 uint probeIndex = gl_GlobalInvocationID.x;

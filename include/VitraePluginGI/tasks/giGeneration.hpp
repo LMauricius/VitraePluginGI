@@ -1,32 +1,29 @@
 #pragma once
 
-#include "VitraePluginGI/data/Generation.hpp"
-#include "VitraePluginGI/data/Probe.hpp"
+#include <iostream>
 
+#include "MMeter.h"
+#include "Vitrae/Assets/Model.hpp"
 #include "Vitrae/Collections/MethodCollection.hpp"
 #include "Vitrae/Data/BoundingBox.hpp"
 #include "Vitrae/Data/Transformation.hpp"
 #include "Vitrae/Params/Purposes.hpp"
 #include "Vitrae/Params/Standard.hpp"
 #include "Vitrae/Pipelines/Compositing/AdaptTasks.hpp"
+#include "Vitrae/Pipelines/Compositing/CacheTasks.hpp"
 #include "Vitrae/Pipelines/Compositing/ClearRender.hpp"
 #include "Vitrae/Pipelines/Compositing/Compute.hpp"
 #include "Vitrae/Pipelines/Compositing/DataRender.hpp"
 #include "Vitrae/Pipelines/Compositing/FrameToTexture.hpp"
 #include "Vitrae/Pipelines/Compositing/Function.hpp"
-#include "Vitrae/Pipelines/Compositing/CacheTasks.hpp"
 #include "Vitrae/Pipelines/Compositing/SceneRender.hpp"
 #include "Vitrae/Pipelines/Shading/Constant.hpp"
 #include "Vitrae/Pipelines/Shading/Header.hpp"
 #include "Vitrae/Pipelines/Shading/Snippet.hpp"
-#include "Vitrae/Assets/Model.hpp"
 #include "Vitrae/Util/StringProcessing.hpp"
-
+#include "VitraePluginGI/data/Generation.hpp"
+#include "VitraePluginGI/data/Probe.hpp"
 #include "dynasma/standalone.hpp"
-
-#include "MMeter.h"
-
-#include <iostream>
 
 namespace VitraePluginGI
 {
@@ -72,11 +69,7 @@ inline void setupGIGeneration(ComponentRoot &root)
                 {
                     {"new_giGridSize", TYPE_INFO<glm::uvec3>},
                     {"new_gpuProbes", TYPE_INFO<ProbeBufferPtr>},
-                    {"new_gpuReflectionTransfers", TYPE_INFO<ReflectionBufferPtr>},
                     {"new_gpuNeighborIndices", TYPE_INFO<NeighborIndexBufferPtr>},
-                    {"new_gpuNeighborTransfers", TYPE_INFO<NeighborTransferBufferPtr>},
-                    {"new_gpuNeighborFilters", TYPE_INFO<NeighborFilterBufferPtr>},
-                    {"new_gpuLeavingPremulFactors", TYPE_INFO<LeavingPremulFactorBufferPtr>},
 
                     {"gi_utilities", TYPE_INFO<void>},
                     {"gi_probegen", TYPE_INFO<void>},
@@ -84,6 +77,13 @@ inline void setupGIGeneration(ComponentRoot &root)
             .outputSpecs =
                 {
                     {"new_generated_probe_transfers", TYPE_INFO<void>},
+                },
+            .filterSpecs =
+                {
+                    {"new_gpuNeighborTransfers", TYPE_INFO<NeighborTransferBufferPtr>},
+                    {"new_gpuNeighborFilters", TYPE_INFO<NeighborFilterBufferPtr>},
+                    {"new_gpuLeavingPremulFactors", TYPE_INFO<LeavingPremulFactorBufferPtr>},
+                    {"new_gpuReflectionTransfers", TYPE_INFO<ReflectionBufferPtr>},
                 },
             .snippet = R"glsl(
                 uint probeIndex = gl_GlobalInvocationID.x;
