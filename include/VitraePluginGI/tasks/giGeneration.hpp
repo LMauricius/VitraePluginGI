@@ -150,56 +150,6 @@ inline void setupGIGeneration(ComponentRoot &root)
             .cacheResults = false,
         }}));
 
-    /*auto p_visualScene = dynasma::makeStandalone<Scene>(Scene::FileLoadParams{
-        .root = root, .filepath = "../VitraePluginGI/media/dataPoint/dataPoint.obj"});
-    auto p_visualModel = p_visualScene->modelProps.at(0).p_model;
-
-    methodCollection.registerComposeTask(
-        root.getComponent<ComposeDataRenderKeeper>().new_asset({ComposeDataRender::SetupParams{
-            .root = root,
-            .inputSpecs =
-                {
-                    {"giSamples", TYPE_INFO<std::vector<Sample>>},
-                    {"display_cleared", TYPE_INFO<void>},
-                },
-            .outputSpecs = {{"rendered_GI_samples", TYPE_INFO<void>}},
-            .p_dataPointModel = p_visualModel,
-            .dataGenerator =
-                [](const RenderComposeContext &context,
-                   ComposeDataRender::RenderCallback callback) {
-                    auto &samples = context.properties.get("giSamples").get<std::vector<Sample>>();
-
-                    for (auto &sample : samples) {
-                        SimpleTransformation trans;
-                        trans.position = sample.position;
-                        // trans.rotation = glm::quatLookAt(sample.normal, glm::vec3(0, 1, 0));
-                        trans.rotation = glm::quat(glm::vec3(0, 0, 1), sample.normal);
-                        trans.scaling = {1.0f, 1.0f, 1.0f};
-
-                        callback(trans.getModelMatrix());
-                    }
-                },
-            .rasterizing = {
-                .vertexPositionOutputPropertyName = "position_view",
-                .modelFormPurpose = Purposes::visual,
-            }}}));*/
-
-    methodCollection.registerComposeTask(dynasma::makeStandalone<ComposeAdaptTasks>(
-        ComposeAdaptTasks::SetupParams{.root = root,
-                                       .adaptorAliases =
-                                           {
-                                               {"displayed_GI_samples", "rendered_GI_samples"},
-                                               {"position_view", "position_camera_view"},
-                                               {"fs_target", "fs_display"},
-                                           },
-                                       .desiredOutputs = {ParamSpec{
-                                           "displayed_GI_samples",
-                                           TYPE_INFO<void>,
-                                       }},
-                                       .friendlyName = "Render GI samples"}));
-
-    methodCollection.registerCompositorOutput("displayed_GI_samples");
-
     /*
     SETUP
     */
