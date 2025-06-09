@@ -182,6 +182,30 @@ inline void setupGIVisualization(ComponentRoot &root)
         }}),
         ShaderStageFlag::Vertex);
 
+    // Register fragment shader
+
+    methodCollection.registerShaderTask(
+        root.getComponent<ShaderSnippetKeeper>().new_asset({ShaderSnippet::StringParams{
+            .inputSpecs =
+                {
+                    StandardParam::normal,
+                    {"probe_subposition", TYPE_INFO<glm::vec3>},
+                },
+            .outputSpecs =
+                {
+                    {"probe_absNormalColor", TYPE_INFO<glm::vec4>},
+                },
+            .snippet = R"glsl(
+                int onEdgeCount = 0;
+                if (abs(probe_subposition.x) > 0.99) onEdgeCount++;
+                if (abs(probe_subposition.y) > 0.99) onEdgeCount++;
+                if (abs(probe_subposition.z) > 0.99) onEdgeCount++;
+                if (onEdgeCount < 2) discard;
+                probe_absNormalColor = vec4(abs(normalize(normal)), 1.0);
+            )glsl",
+        }}),
+        ShaderStageFlag::Fragment);
+
     // register task
 
     methodCollection.registerComposeTask(
@@ -208,6 +232,7 @@ inline void setupGIVisualization(ComponentRoot &root)
                     {"displayed_GI_probe_frames", "rendered_GI_probe_frames"},
                     {"position_view", "position_camera_view"},
                     {"fs_target", "fs_display"},
+                    {"phong_shade", "probe_absNormalColor"},
                 },
             .desiredOutputs = {ParamSpec{
                 "displayed_GI_probe_frames",
