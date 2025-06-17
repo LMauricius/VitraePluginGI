@@ -214,7 +214,20 @@ inline void setupGIVisualization(ComponentRoot &root)
                 if (abs(probe_subposition.y) > 0.99) onEdgeCount++;
                 if (abs(probe_subposition.z) > 0.99) onEdgeCount++;
                 if (onEdgeCount < 2) discard;
-                probe_absNormalColor = vec4(abs(normalize(normal)), 1.0);
+
+                vec3 absNorm = abs(normal);
+                float minel = min(absNorm.x, min(absNorm.y, absNorm.z));
+
+                vec3 col1 = (absNorm - minel) / (1.0 - minel);
+                vec3 col2 = (1.0 - col1.gbr)*0.5;
+
+                float scale = pow(minel, 0.3);
+                float whitescale = pow(minel, 3);
+
+                probe_absNormalColor = vec4(
+                    (col1*scale + col2*(1.0-scale)) * (1.0-whitescale) + vec3(whitescale),
+                    1.0
+                );
             )glsl",
         }}),
         ShaderStageFlag::Fragment);
