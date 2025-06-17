@@ -69,6 +69,20 @@ struct H_ProbeDefinition
     Reflection reflection;
     FaceTransfer leavingPremulFactor;
     std::vector<std::uint32_t> neighborIndices;
+
+    struct
+    {
+        glm::vec3 pivot;
+        std::uint32_t depth;
+        std::uint32_t parentIndex;
+        std::uint32_t childIndex[2][2][2];
+    } recursion;
+
+    struct
+    {
+        glm::vec3 positionSum;
+        glm::uvec3 sampleCount;
+    } sampleCache;
 };
 
 struct H_ProbeState
@@ -98,6 +112,40 @@ inline const CompoundTypeMeta TYPE_META<G_ProbeDefinition> = {
     STD140LayoutMeta{.std140Size = sizeof(G_ProbeDefinition), .std140Alignment = 16},
 };
 
+struct G_ProbeRecursion
+{
+    glm::vec3 pivot;
+    std::uint32_t parentIndex;
+    std::uint32_t childIndex[8];
+    std::uint32_t depth;
+    std::uint32_t padding[3];
+};
+template <>
+inline const CompoundTypeMeta TYPE_META<G_ProbeRecursion> = {
+    GLSLStructMeta{.bodySnippet = R"glsl(
+        vec3 pivot;
+        uint parentIndex;
+        uint childIndex[8];
+        uint depth;
+        uint padding[3];
+    )glsl"},
+    STD140LayoutMeta{.std140Size = sizeof(G_ProbeRecursion), .std140Alignment = 16},
+};
+
+struct G_ProbeSampleCache
+{
+    glm::vec3 positionSum;
+    glm::uvec3 sampleCount;
+};
+template <>
+inline const CompoundTypeMeta TYPE_META<G_ProbeSampleCache> = {
+    GLSLStructMeta{.bodySnippet = R"glsl(
+        vec3 positionSum;
+        uvec3 sampleCount;
+    )glsl"},
+    STD140LayoutMeta{.std140Size = sizeof(G_ProbeSampleCache), .std140Alignment = 16},
+};
+
 struct G_ProbeState
 {
     glm::vec4 illumination[6];
@@ -111,6 +159,7 @@ inline const CompoundTypeMeta TYPE_META<G_ProbeState> = {
 };
 
 using ProbeBufferPtr = SharedBufferPtr<void, G_ProbeDefinition>;
+using ProbeRecursionBufferPtr = SharedBufferPtr<void, G_ProbeRecursion>;
 using ProbeStateBufferPtr = SharedBufferPtr<void, G_ProbeState>;
 using ReflectionBufferPtr = SharedBufferPtr<void, Reflection>;
 using LeavingPremulFactorBufferPtr = SharedBufferPtr<void, FaceTransfer>;
@@ -130,6 +179,7 @@ Conversion
 */
 
 void convertHost2GpuBuffers(std::span<const H_ProbeDefinition> hostProbes, ProbeBufferPtr gpuProbes,
+                            ProbeRecursionBufferPtr gpuRecursions,
                             ReflectionBufferPtr gpuReflectionTransfers,
                             LeavingPremulFactorBufferPtr gpuLeavingPremulFactors,
                             NeighborIndexBufferPtr gpuNeighborIndices,

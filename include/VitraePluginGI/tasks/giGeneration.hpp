@@ -160,11 +160,14 @@ inline void setupGIGeneration(ComponentRoot &root)
                 {
                     StandardParam::scene,
                     {"numGISamples", TYPE_INFO<std::size_t>, (std::size_t)30000},
+                    {"maxGIDepth", TYPE_INFO<std::uint32_t>, (std::uint32_t)5},
+                    {"minProbeSize", TYPE_INFO<float>, 1.5f},
                 },
             .outputSpecs =
                 {
                     {"new_giSamples", TYPE_INFO<std::vector<Sample>>},
                     {"new_gpuProbes", TYPE_INFO<ProbeBufferPtr>},
+                    {"new_gpuProbeRecursions", TYPE_INFO<ProbeRecursionBufferPtr>},
                     {"new_gpuProbeStates", TYPE_INFO<ProbeStateBufferPtr>},
                     {"new_gpuReflectionTransfers", TYPE_INFO<ReflectionBufferPtr>},
                     {"new_gpuLeavingPremulFactors", TYPE_INFO<LeavingPremulFactorBufferPtr>},
@@ -182,6 +185,11 @@ inline void setupGIGeneration(ComponentRoot &root)
 
                     std::size_t numGISamples =
                         context.properties.get("numGISamples").get<std::size_t>();
+
+                    std::uint32_t maxGIDepth =
+                        context.properties.get("maxGIDepth").get<std::uint32_t>();
+
+                    float minProbeSize = context.properties.get("minProbeSize").get<float>();
 
                     // get the AABB of the scene
                     const Scene &scene =
@@ -202,6 +210,11 @@ inline void setupGIGeneration(ComponentRoot &root)
                     ProbeBufferPtr gpuProbes = makeBuffer<void, G_ProbeDefinition>(
                         root, (BufferUsageHint::HOST_INIT | BufferUsageHint::GPU_DRAW),
                         "gpuProbes");
+                    ProbeRecursionBufferPtr gpuProbeRecursions = makeBuffer<void, G_ProbeRecursion>(
+                        root,
+                        (BufferUsageHint::HOST_INIT | BufferUsageHint::GPU_COMPUTE |
+                         BufferUsageHint::GPU_DRAW),
+                        "gpuProbeRecursions");
                     ProbeStateBufferPtr gpuProbeStates = makeBuffer<void, G_ProbeState>(
                         root,
                         (BufferUsageHint::HOST_INIT | BufferUsageHint::GPU_COMPUTE |
@@ -230,12 +243,13 @@ inline void setupGIGeneration(ComponentRoot &root)
                     prepareScene(scene, smpScene, numNullMeshes, numNullTris);
                     std::vector<Sample> samples;
                     sampleScene(smpScene, numGISamples, samples);
-                    generateProbeList(std::span<const Sample>(samples), probes, gridSize,
-                                      worldStart, sceneAABB.getCenter(), sceneAABB.getExtent(),
-                                      1.5f, false);
-                    convertHost2GpuBuffers(probes, gpuProbes, gpuReflectionTransfers,
-                                           gpuLeavingPremulFactors, gpuNeighborIndices,
-                                           gpuNeighborTransfers, gpuNeighborFilters);
+                    generateProbeList(std::span<const Sample>(samples), sceneAABB.getCenter(),
+                                      sceneAABB.getExtent(), minProbeSize, maxGIDepth, probes,
+                                      worldStart);
+                    convertHost2GpuBuffers(probes, gpuProbes, gpuProbeRecursions,
+                                           gpuReflectionTransfers, gpuLeavingPremulFactors,
+                                           gpuNeighborIndices, gpuNeighborTransfers,
+                                           gpuNeighborFilters);
                     // generateTransfers(probes, gpuNeighborTransfers, gpuNeighborFilters);
 
                     gpuProbeStates.resizeElements(probes.size());
@@ -246,6 +260,7 @@ inline void setupGIGeneration(ComponentRoot &root)
                     }
 
                     gpuProbes.getRawBuffer()->synchronize();
+                    gpuProbeRecursions.getRawBuffer()->synchronize();
                     gpuProbeStates.getRawBuffer()->synchronize();
                     gpuReflectionTransfers.getRawBuffer()->synchronize();
                     gpuLeavingPremulFactors.getRawBuffer()->synchronize();
@@ -256,6 +271,7 @@ inline void setupGIGeneration(ComponentRoot &root)
                     // store properties
                     context.properties.set("new_giSamples", samples);
                     context.properties.set("new_gpuProbes", gpuProbes);
+                    context.properties.set("new_gpuProbeRecursions", gpuProbeRecursions);
                     context.properties.set("new_gpuProbeStates", gpuProbeStates);
                     context.properties.set("new_gpuReflectionTransfers", gpuReflectionTransfers);
                     context.properties.set("new_gpuLeavingPremulFactors", gpuLeavingPremulFactors);
@@ -311,6 +327,7 @@ inline void setupGIGeneration(ComponentRoot &root)
                 {
                     {"giSamples", "new_giSamples"},
                     {"gpuProbes", "new_gpuProbes"},
+                    {"gpuProbeRecursions", "new_gpuProbeRecursions"},
                     {"gpuProbeStates", "new_gpuProbeStates"},
                     {"gpuReflectionTransfers", "new_gpuReflectionTransfers"},
                     {"gpuLeavingPremulFactors", "new_gpuLeavingPremulFactors"},
@@ -327,6 +344,7 @@ inline void setupGIGeneration(ComponentRoot &root)
                 {
                     {"giSamples", TYPE_INFO<std::vector<Sample>>},
                     {"gpuProbes", TYPE_INFO<ProbeBufferPtr>},
+                    {"gpuProbeRecursions", TYPE_INFO<ProbeRecursionBufferPtr>},
                     {"gpuProbeStates", TYPE_INFO<ProbeStateBufferPtr>},
                     {"gpuReflectionTransfers", TYPE_INFO<ReflectionBufferPtr>},
                     {"gpuLeavingPremulFactors", TYPE_INFO<LeavingPremulFactorBufferPtr>},

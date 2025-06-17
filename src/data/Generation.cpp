@@ -313,75 +313,195 @@ void sampleScene(const SamplingScene &smpScene, std::size_t numSamples,
     }
 }
 
-void generateProbeList(std::span<const Sample> samples, std::vector<H_ProbeDefinition> &probes,
-                       glm::uvec3 &gridSize, glm::vec3 &worldStart, glm::vec3 worldCenter,
-                       glm::vec3 worldSize, float minProbeSize, bool cpuTransferGen)
+void splitProbe(std::vector<H_ProbeDefinition> &probes, std::uint32_t index, glm::vec3 pivot)
 {
-    MMETER_FUNC_PROFILER;
+    probes[index].recursion.pivot = pivot;
 
-    gridSize = glm::uvec3(worldSize / minProbeSize);
-    worldStart = worldCenter - worldSize / 2.0f;
+    if (!(pivot.x > probes[index].position.x - probes[index].size.x &&
+          pivot.x < probes[index].position.x + probes[index].size.x))
+        pivot.x = probes[index].position.x;
+    if (!(pivot.y > probes[index].position.y - probes[index].size.y &&
+          pivot.y < probes[index].position.y + probes[index].size.y))
+        pivot.y = probes[index].position.y;
+    if (!(pivot.z > probes[index].position.z - probes[index].size.z &&
+          pivot.z < probes[index].position.z + probes[index].size.z))
+        pivot.z = probes[index].position.z;
 
-    probes.resize(gridSize.x * gridSize.y * gridSize.z);
+    for (bool x : {0, 1}) {
+        for (bool y : {0, 1}) {
+            for (bool z : {0, 1}) {
+                glm::vec3 parentCorner =
+                    probes[index].position +
+                    0.5f * glm::vec3(x ? probes[index].size.x : -probes[index].size.x,
+                                     y ? probes[index].size.y : -probes[index].size.y,
+                                     z ? probes[index].size.z : -probes[index].size.z);
 
-    auto getIndex = [gridSize](glm::ivec3 ind) -> std::uint32_t {
-        return ind.x * gridSize.y * gridSize.z + ind.y * gridSize.z + ind.z;
-    };
-    auto getProbe = [&](glm::ivec3 ind) -> auto & { return probes[getIndex(ind)]; };
+                probes[index].recursion.childIndex[x][y][z] = probes.size();
+                probes.push_back(H_ProbeDefinition{
+                    .position = (pivot + parentCorner) / 2.0f,
+                    .size = glm::abs(pivot - parentCorner),
+                    .recursion{
+                        .pivot = {0.0f, 0.0f, 0.0f},
+                        .depth = probes[index].recursion.depth + 1,
+                        .parentIndex = index,
+                        .childIndex = {0, 0, 0, 0, 0, 0, 0, 0},
+                    },
+                    .sampleCache{
+                        .positionSum = {0.0f, 0.0f, 0.0f},
+                        .sampleCount = {0, 0, 0},
+                    },
+                });
+            }
+        }
+    }
+}
 
-    // edge probes' edges are put at world edges
-    glm::vec3 probeSize = worldSize / glm::vec3(gridSize);
-    glm::ivec3 minIndex = glm::ivec3(0, 0, 0);
-    glm::uvec3 maxIndex = gridSize - 1u;
-    glm::vec3 ind2OffsetConversion = worldSize / glm::vec3(gridSize);
+bool areNeighbors(std::vector<H_ProbeDefinition> &probes, std::uint32_t index,
+                  std::uint32_t neighIndex)
+{
+    glm::vec3 diff = glm::abs(probes[index].position - probes[neighIndex].position);
+    glm::vec3 maxDiff = probes[index].size / 2.0f + probes[neighIndex].size / 2.0f;
 
-    {
-        MMETER_SCOPE_PROFILER("Probe gen");
+    return glm::all(glm::lessThanEqual(diff, maxDiff + 0.01f));
+}
 
-        for (int x = 0; x < gridSize.x; x++) {
-            for (int y = 0; y < gridSize.y; y++) {
-                for (int z = 0; z < gridSize.z; z++) {
-                    auto &probe = getProbe({x, y, z});
+void extractChildNeighbors(std::vector<H_ProbeDefinition> &probes, std::uint32_t index,
+                           std::uint32_t neighIndex)
+{
+    bool anyChildIsNeighbor = false;
 
-                    probe.position =
-                        worldStart + (glm::vec3(x, y, z) + 0.5f) * ind2OffsetConversion;
-                    probe.size = probeSize;
+    for (bool x : {0, 1}) {
+        for (bool y : {0, 1}) {
+            for (bool z : {0, 1}) {
+                std::uint32_t childIndex = probes[neighIndex].recursion.childIndex[x][y][z];
 
-                    for (int neighx : {-1, 0, 1}) {
-                        for (int neighy : {-1, 0, 1}) {
-                            for (int neighz : {-1, 0, 1}) {
-                                if ((neighx == 0 && neighy == 0 && neighz == 0) || x + neighx < 0 ||
-                                    x + neighx >= maxIndex.x || y + neighy < 0 ||
-                                    y + neighy >= maxIndex.y || z + neighz < 0 ||
-                                    z + neighz >= maxIndex.z) {
-                                    continue;
-                                }
-                                probe.neighborIndices.push_back(
-                                    getIndex({x + neighx, y + neighy, z + neighz}));
-                            }
-                        }
-                    }
+                if (childIndex == 0) {
+                    continue;
+                }
 
-                    /*if (x > 0)
-                        probe.neighborIndices.push_back(getIndex({x - 1, y, z}));
-                    if (x < maxIndex.x)
-                        probe.neighborIndices.push_back(getIndex({x + 1, y, z}));
-
-                    if (y > 0)
-                        probe.neighborIndices.push_back(getIndex({x, y - 1, z}));
-                    if (y < maxIndex.y)
-                        probe.neighborIndices.push_back(getIndex({x, y + 1, z}));
-
-                    if (z > 0)
-                        probe.neighborIndices.push_back(getIndex({x, y, z - 1}));
-                    if (z < maxIndex.z)
-                        probe.neighborIndices.push_back(getIndex({x, y, z + 1}));*/
+                // Some children are neighbors
+                if (areNeighbors(probes, index, childIndex)) {
+                    anyChildIsNeighbor = true;
+                    extractChildNeighbors(probes, index, childIndex);
                 }
             }
         }
     }
 
-    if (cpuTransferGen) {}
+    // Maybe it's a leaf, maybe an error happened in precision
+    // -> add this probe as neighbor
+    if (!anyChildIsNeighbor) {
+        probes[index].neighborIndices.push_back(neighIndex);
+    }
+}
+
+void generateChildNeighbors(std::vector<H_ProbeDefinition> &probes, std::uint32_t index)
+{
+    for (bool x : {0, 1}) {
+        for (bool y : {0, 1}) {
+            for (bool z : {0, 1}) {
+                std::uint32_t childIndex = probes[index].recursion.childIndex[x][y][z];
+
+                if (childIndex == 0) {
+                    continue;
+                }
+
+                probes[childIndex].neighborIndices.clear();
+
+                // Other children are neighbors
+                for (bool x2 : {0, 1}) {
+                    for (bool y2 : {0, 1}) {
+                        for (bool z2 : {0, 1}) {
+                            if (x2 == x && y2 == y && z2 == z) {
+                                continue;
+                            }
+                            extractChildNeighbors(probes, childIndex,
+                                                  probes[index].recursion.childIndex[x2][y2][z2]);
+                        }
+                    }
+                }
+
+                // Some parent neighbors are neighbors
+                for (std::uint32_t nInd : probes[index].neighborIndices) {
+                    if (areNeighbors(probes, childIndex, nInd)) {
+                        extractChildNeighbors(probes, childIndex, nInd);
+                    }
+                }
+            }
+        }
+    }
+}
+
+void addSample(Sample sample, std::vector<H_ProbeDefinition> &probes, std::uint32_t index)
+{
+    if (probes[index].recursion.childIndex[0][0][0] == 0) {
+        probes[index].sampleCache.positionSum += sample.position;
+        probes[index].sampleCache.sampleCount += glm::uvec3{1, 1, 1};
+    } else {
+        bool x = sample.position.x > probes[index].recursion.pivot.x;
+        bool y = sample.position.y > probes[index].recursion.pivot.y;
+        bool z = sample.position.z > probes[index].recursion.pivot.z;
+        addSample(sample, probes, probes[index].recursion.childIndex[x][y][z]);
+    }
+}
+
+void generateProbeList(std::span<const Sample> samples, glm::vec3 worldCenter, glm::vec3 worldSize,
+                       float minProbeSize, std::uint32_t maxDepth,
+                       std::vector<H_ProbeDefinition> &probes, glm::vec3 &worldStart)
+{
+    MMETER_FUNC_PROFILER;
+
+    probes.clear();
+
+    probes.push_back({
+        .position = worldCenter,
+        .size = worldSize,
+        .neighborIndices = {},
+        .recursion{
+            .pivot = {},
+            .depth = 1,
+            .parentIndex = 0,
+            .childIndex = {0, 0, 0, 0, 0, 0, 0, 0},
+        },
+        .sampleCache{
+            .positionSum = {0.0f, 0.0f, 0.0f},
+            .sampleCount = {0, 0, 0},
+        },
+    });
+
+    // Generate the probe tree
+    bool needsReprocess = true;
+    std::uint32_t newIndicesStart = 0;
+    std::uint32_t newIndicesEnd = 1;
+    while (needsReprocess) {
+        needsReprocess = false;
+
+        // Put samples in new (and some old) probes
+        for (auto &sample : samples) {
+            addSample(sample, probes, 0);
+        }
+
+        // find whether some of the new probes should be split
+        for (std::uint32_t i = newIndicesStart; i < newIndicesEnd; i++) {
+            if (probes[i].recursion.depth < maxDepth && probes[i].size.x > minProbeSize &&
+                probes[i].size.y > minProbeSize && probes[i].size.z > minProbeSize &&
+                probes[i].sampleCache.sampleCount != glm::uvec3{0, 0, 0}) {
+                splitProbe(probes, i,
+                           probes[i].sampleCache.positionSum /
+                               glm::vec3(probes[i].sampleCache.sampleCount));
+                needsReprocess = true;
+            }
+        }
+
+        newIndicesStart = newIndicesEnd;
+        newIndicesEnd = probes.size();
+    }
+
+    // Generate neighbors
+    generateChildNeighbors(probes, 0);
+
+    // Generate world start
+    worldStart = probes[0].position - probes[0].size / 2.0f;
 }
 
 void generateTransfers(std::vector<H_ProbeDefinition> &probes,

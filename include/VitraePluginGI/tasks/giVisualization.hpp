@@ -162,7 +162,9 @@ inline void setupGIVisualization(ComponentRoot &root)
         root.getComponent<ShaderSnippetKeeper>().new_asset({ShaderSnippet::StringParams{
             .inputSpecs =
                 {
+                    {"maxGIDepth", TYPE_INFO<std::uint32_t>},
                     {"gpuProbes", TYPE_INFO<ProbeBufferPtr>},
+                    {"gpuProbeRecursions", TYPE_INFO<ProbeRecursionBufferPtr>},
                     StandardParam::index4data,
                     {"probe_subposition", TYPE_INFO<glm::vec3>},
                     StandardParam::normal,
@@ -174,10 +176,21 @@ inline void setupGIVisualization(ComponentRoot &root)
                     {"probe_position4projection", TYPE_INFO<glm::vec4>},
                 },
             .snippet = R"glsl(
-                probe_position4projection = mat_proj * mat_view * vec4(
-                    probe_subposition * gpuProbes[index4data].size + gpuProbes[index4data].position,
-                    1.0
-                );
+                if (
+                    gpuProbeRecursions[index4data].depth != 0 &&
+                    ( 
+                        gpuProbeRecursions[index4data].depth == maxGIDepth ||
+                        (gpuProbeRecursions[index4data].depth < maxGIDepth &&
+                        gpuProbeRecursions[index4data].childIndex[0] == 0)
+                    )
+                ) {
+                    probe_position4projection = mat_proj * mat_view * vec4(
+                        probe_subposition * 0.5 * gpuProbes[index4data].size + gpuProbes[index4data].position,
+                        1.0
+                    );
+                } else {
+                    probe_position4projection = vec4(0.0, 0.0, 0.0, 0.0);
+                }
             )glsl",
         }}),
         ShaderStageFlag::Vertex);

@@ -3,7 +3,7 @@
 #include "MMeter.h"
 
 void Vitrae::convertHost2GpuBuffers(std::span<const H_ProbeDefinition> hostProbes,
-                                    ProbeBufferPtr gpuProbes,
+                                    ProbeBufferPtr gpuProbes, ProbeRecursionBufferPtr gpuRecursions,
                                     ReflectionBufferPtr gpuReflectionTransfers,
                                     LeavingPremulFactorBufferPtr gpuLeavingPremulFactors,
                                     NeighborIndexBufferPtr gpuNeighborIndices,
@@ -13,6 +13,7 @@ void Vitrae::convertHost2GpuBuffers(std::span<const H_ProbeDefinition> hostProbe
     MMETER_FUNC_PROFILER;
 
     gpuProbes.resizeElements(hostProbes.size());
+    gpuRecursions.resizeElements(hostProbes.size());
     gpuReflectionTransfers.resizeElements(hostProbes.size());
     gpuLeavingPremulFactors.resizeElements(hostProbes.size());
 
@@ -21,6 +22,7 @@ void Vitrae::convertHost2GpuBuffers(std::span<const H_ProbeDefinition> hostProbe
     for (std::size_t i = 0; i < hostProbes.size(); i++) {
         auto &hostProbe = hostProbes[i];
         auto &gpuProbe = gpuProbes.getMutableElement(i);
+        auto &gpuRecursion = gpuRecursions.getMutableElement(i);
         auto &gpuReflectionTransfer = gpuReflectionTransfers.getMutableElement(i);
         auto &gpuLeavingPremulFactor = gpuLeavingPremulFactors.getMutableElement(i);
 
@@ -28,6 +30,18 @@ void Vitrae::convertHost2GpuBuffers(std::span<const H_ProbeDefinition> hostProbe
         gpuProbe.size = hostProbe.size;
         gpuProbe.neighborSpecBufStart = numNeighborSpecs;
         gpuProbe.neighborSpecCount = hostProbe.neighborIndices.size();
+
+        gpuRecursion.pivot = hostProbe.recursion.pivot;
+        gpuRecursion.depth = hostProbe.recursion.depth;
+        gpuRecursion.parentIndex = hostProbe.recursion.parentIndex;
+        for (bool x : {0, 1}) {
+            for (bool y : {0, 1}) {
+                for (bool z : {0, 1}) {
+                    gpuRecursion.childIndex[x * 4 + 2 * y + z] =
+                        hostProbe.recursion.childIndex[x][y][z];
+                }
+            }
+        }
 
         for (std::size_t d = 0; d < 6; d++) {
             gpuReflectionTransfer.face[d] = hostProbe.reflection.face[d];
