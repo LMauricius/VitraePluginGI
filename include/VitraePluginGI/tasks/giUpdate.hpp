@@ -54,6 +54,7 @@ inline void setupGIUpdate(ComponentRoot &root)
                     {"giWorldSize", TYPE_INFO<glm::vec3>},
                     {"giGridSize", TYPE_INFO<glm::uvec3>},
                     {"camera_position", TYPE_INFO<glm::vec3>},
+                    {"camera_direction", TYPE_INFO<glm::vec3>},
                     {"camera_light_strength", TYPE_INFO<float>, 50.0f},
 
                     {"gi_utilities", TYPE_INFO<void>},
@@ -86,8 +87,10 @@ inline void setupGIUpdate(ComponentRoot &root)
                 //}
             
                 // if camera is inside probe, glow
-                if (all(lessThan(abs(camera_position - probePos), probeSize * 0.5)) && faceIndex == 0) {
-                    gpuProbeStates[probeIndex].illumination[faceIndex] += vec4(camera_light_strength);
+                if (all(lessThan(abs(camera_position - probePos), probeSize * 0.5)) /*&& faceIndex == 0*/) {
+                    gpuProbeStates[probeIndex].illumination[faceIndex] += vec4(camera_light_strength) * (
+                        max(dot(-DIRECTIONS[faceIndex], camera_direction), 0.0)
+                    );
                 } else {
                 }
                 for (uint i = neighborStartInd; i < neighborStartInd + neighborCount; i++) {
