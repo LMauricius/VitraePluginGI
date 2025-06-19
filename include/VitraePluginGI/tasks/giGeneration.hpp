@@ -172,12 +172,14 @@ inline void setupGIGeneration(ComponentRoot &root)
                     {"new_gpuReflectionTransfers", TYPE_INFO<ReflectionBufferPtr>},
                     {"new_gpuLeavingPremulFactors", TYPE_INFO<LeavingPremulFactorBufferPtr>},
                     {"new_gpuNeighborIndices", TYPE_INFO<NeighborIndexBufferPtr>},
+                    {"new_gpuNeighborOwnerIndices", TYPE_INFO<NeighborIndexBufferPtr>},
                     {"new_gpuNeighborTransfers", TYPE_INFO<NeighborTransferBufferPtr>},
                     {"new_gpuNeighborFilters", TYPE_INFO<NeighborFilterBufferPtr>},
                     {"new_giWorldStart", TYPE_INFO<glm::vec3>},
                     {"new_giWorldSize", TYPE_INFO<glm::vec3>},
                     {"new_giGridSize", TYPE_INFO<glm::uvec3>},
                     {"new_gpuProbeCount", TYPE_INFO<std::uint32_t>},
+                    {"new_gpuNeighborCount", TYPE_INFO<std::uint32_t>},
                 },
             .p_function =
                 [&root](const RenderComposeContext &context) {
@@ -230,6 +232,10 @@ inline void setupGIGeneration(ComponentRoot &root)
                     NeighborIndexBufferPtr gpuNeighborIndices = makeBuffer<void, std::uint32_t>(
                         root, (BufferUsageHint::HOST_INIT | BufferUsageHint::GPU_DRAW),
                         "gpuNeighborIndices");
+                    NeighborIndexBufferPtr gpuNeighborOwnerIndices =
+                        makeBuffer<void, std::uint32_t>(
+                            root, (BufferUsageHint::HOST_INIT | BufferUsageHint::GPU_DRAW),
+                            "gpuNeighborOwnerIndices");
                     NeighborTransferBufferPtr gpuNeighborTransfers =
                         makeBuffer<void, NeighborTransfer>(
                             root, (BufferUsageHint::HOST_INIT | BufferUsageHint::GPU_DRAW),
@@ -248,8 +254,8 @@ inline void setupGIGeneration(ComponentRoot &root)
                                       worldStart);
                     convertHost2GpuBuffers(probes, gpuProbes, gpuProbeRecursions,
                                            gpuReflectionTransfers, gpuLeavingPremulFactors,
-                                           gpuNeighborIndices, gpuNeighborTransfers,
-                                           gpuNeighborFilters);
+                                           gpuNeighborIndices, gpuNeighborOwnerIndices,
+                                           gpuNeighborTransfers, gpuNeighborFilters);
                     // generateTransfers(probes, gpuNeighborTransfers, gpuNeighborFilters);
 
                     gpuProbeStates.resizeElements(probes.size());
@@ -265,6 +271,7 @@ inline void setupGIGeneration(ComponentRoot &root)
                     gpuReflectionTransfers.getRawBuffer()->synchronize();
                     gpuLeavingPremulFactors.getRawBuffer()->synchronize();
                     gpuNeighborIndices.getRawBuffer()->synchronize();
+                    gpuNeighborOwnerIndices.getRawBuffer()->synchronize();
                     gpuNeighborTransfers.getRawBuffer()->synchronize();
                     gpuNeighborFilters.getRawBuffer()->synchronize();
 
@@ -276,6 +283,7 @@ inline void setupGIGeneration(ComponentRoot &root)
                     context.properties.set("new_gpuReflectionTransfers", gpuReflectionTransfers);
                     context.properties.set("new_gpuLeavingPremulFactors", gpuLeavingPremulFactors);
                     context.properties.set("new_gpuNeighborIndices", gpuNeighborIndices);
+                    context.properties.set("new_gpuNeighborOwnerIndices", gpuNeighborOwnerIndices);
                     context.properties.set("new_gpuNeighborTransfers", gpuNeighborTransfers);
                     context.properties.set("new_gpuNeighborFilters", gpuNeighborFilters);
                     context.properties.set("new_giWorldStart", worldStart);
@@ -283,6 +291,8 @@ inline void setupGIGeneration(ComponentRoot &root)
                     context.properties.set("new_giGridSize", gridSize);
                     context.properties.set("new_gpuProbeCount",
                                            (std::uint32_t)gpuProbes.numElements());
+                    context.properties.set("new_gpuNeighborCount",
+                                           (std::uint32_t)gpuNeighborIndices.numElements());
 
                     // Print stats
                     root.getInfoStream() << "=== GI STATISTICS ===" << std::endl;
@@ -302,6 +312,9 @@ inline void setupGIGeneration(ComponentRoot &root)
                         << "gpuNeighborIndices size: " << gpuNeighborIndices.byteSize()
                         << std::endl;
                     root.getInfoStream()
+                        << "gpuNeighborOwnerIndices size: " << gpuNeighborOwnerIndices.byteSize()
+                        << std::endl;
+                    root.getInfoStream()
                         << "gpuNeighborTransfers size: " << gpuNeighborTransfers.byteSize()
                         << std::endl;
                     root.getInfoStream()
@@ -311,8 +324,8 @@ inline void setupGIGeneration(ComponentRoot &root)
                         << "Total GPU size: "
                         << (gpuProbes.byteSize() + gpuProbeStates.byteSize() +
                             gpuReflectionTransfers.byteSize() + gpuLeavingPremulFactors.byteSize() +
-                            gpuNeighborIndices.byteSize() + gpuNeighborTransfers.byteSize() +
-                            gpuNeighborFilters.byteSize()) /
+                            gpuNeighborIndices.byteSize() + gpuNeighborOwnerIndices.byteSize() +
+                            gpuNeighborTransfers.byteSize() + gpuNeighborFilters.byteSize()) /
                                1000000.0f
                         << " MB" << std::endl;
                     root.getInfoStream() << "=== /GI STATISTICS ===" << std::endl;
@@ -332,12 +345,14 @@ inline void setupGIGeneration(ComponentRoot &root)
                     {"gpuReflectionTransfers", "new_gpuReflectionTransfers"},
                     {"gpuLeavingPremulFactors", "new_gpuLeavingPremulFactors"},
                     {"gpuNeighborIndices", "new_gpuNeighborIndices"},
+                    {"gpuNeighborOwnerIndices", "new_gpuNeighborOwnerIndices"},
                     {"gpuNeighborTransfers", "new_gpuNeighborTransfers"},
                     {"gpuNeighborFilters", "new_gpuNeighborFilters"},
                     {"giWorldStart", "new_giWorldStart"},
                     {"giWorldSize", "new_giWorldSize"},
                     {"giGridSize", "new_giGridSize"},
                     {"gpuProbeCount", "new_gpuProbeCount"},
+                    {"gpuNeighborCount", "new_gpuNeighborCount"},
                     {"generated_probe_transfers", "new_generated_probe_transfers"},
                 },
             .desiredOutputs =
@@ -349,12 +364,14 @@ inline void setupGIGeneration(ComponentRoot &root)
                     {"gpuReflectionTransfers", TYPE_INFO<ReflectionBufferPtr>},
                     {"gpuLeavingPremulFactors", TYPE_INFO<LeavingPremulFactorBufferPtr>},
                     {"gpuNeighborIndices", TYPE_INFO<NeighborIndexBufferPtr>},
+                    {"gpuNeighborOwnerIndices", TYPE_INFO<NeighborIndexBufferPtr>},
                     {"gpuNeighborTransfers", TYPE_INFO<NeighborTransferBufferPtr>},
                     {"gpuNeighborFilters", TYPE_INFO<NeighborFilterBufferPtr>},
                     {"giWorldStart", TYPE_INFO<glm::vec3>},
                     {"giWorldSize", TYPE_INFO<glm::vec3>},
                     {"giGridSize", TYPE_INFO<glm::uvec3>},
                     {"gpuProbeCount", TYPE_INFO<std::uint32_t>},
+                    {"gpuNeighborCount", TYPE_INFO<std::uint32_t>},
                     {"generated_probe_transfers", TYPE_INFO<void>},
                 },
             .friendlyName = "Prepare GI data"}));

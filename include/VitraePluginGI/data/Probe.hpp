@@ -183,6 +183,7 @@ void convertHost2GpuBuffers(std::span<const H_ProbeDefinition> hostProbes, Probe
                             ReflectionBufferPtr gpuReflectionTransfers,
                             LeavingPremulFactorBufferPtr gpuLeavingPremulFactors,
                             NeighborIndexBufferPtr gpuNeighborIndices,
+                            NeighborIndexBufferPtr gpuNeighborOwnerIndices,
                             NeighborTransferBufferPtr gpuNeighborTransfers,
                             NeighborFilterBufferPtr gpuNeighborFilters);
 
