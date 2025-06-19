@@ -427,6 +427,9 @@ void generateChildNeighbors(std::vector<H_ProbeDefinition> &probes, std::uint32_
                         extractChildNeighbors(probes, childIndex, nInd);
                     }
                 }
+
+                // Now generate for children of this child
+                generateChildNeighbors(probes, childIndex);
             }
         }
     }
