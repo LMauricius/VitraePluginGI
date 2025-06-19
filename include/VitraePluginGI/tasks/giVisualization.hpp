@@ -247,6 +247,7 @@ inline void setupGIVisualization(ComponentRoot &root)
                     .modelFormPurpose = Purposes::visual,
                     .cullingMode = CullingMode::None,
                     .rasterizingMode = RasterizingMode::DerivationalTraceEdges,
+                    .lineWidth = 2.5f,
                 },
         }));
 
