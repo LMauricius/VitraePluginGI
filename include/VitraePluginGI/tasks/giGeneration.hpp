@@ -105,6 +105,12 @@ inline void setupGIGeneration(ComponentRoot &root)
                     }
                 }
 
+                // Ensure the leaving factor is at least the amount that would hit this probe's wall
+                totalLeaving = max(
+                    totalLeaving,
+                    factorTo(probeIndex, probeIndex, myDirInd, myDirInd)
+                );
+
                 if (totalLeaving > 0.05) {
                     new_gpuLeavingPremulFactors[probeIndex].face[myDirInd] = 0.95 / totalLeaving;
                 } else {
