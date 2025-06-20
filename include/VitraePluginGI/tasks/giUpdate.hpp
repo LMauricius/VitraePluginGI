@@ -46,13 +46,13 @@ inline void setupGIUpdate(ComponentRoot &root)
                 {
                     {"gpuProbeStates_prev", TYPE_INFO<ProbeStateBufferPtr>},
                     {"gpuProbes", TYPE_INFO<ProbeBufferPtr>},
+                    {"gpuProbeRecursions", TYPE_INFO<ProbeRecursionBufferPtr>},
                     {"gpuNeighborIndices", TYPE_INFO<NeighborIndexBufferPtr>},
                     {"gpuReflectionTransfers", TYPE_INFO<ReflectionBufferPtr>},
                     {"gpuNeighborTransfers", TYPE_INFO<NeighborTransferBufferPtr>},
                     {"gpuNeighborFilters", TYPE_INFO<NeighborFilterBufferPtr>},
                     {"gpuLeavingPremulFactors", TYPE_INFO<LeavingPremulFactorBufferPtr>},
                     {"giWorldSize", TYPE_INFO<glm::vec3>},
-                    {"giGridSize", TYPE_INFO<glm::uvec3>},
                     {"camera_position", TYPE_INFO<glm::vec3>},
                     {"camera_direction", TYPE_INFO<glm::vec3>},
                     {"camera_light_strength", TYPE_INFO<float>, 50.0f},
@@ -72,46 +72,49 @@ inline void setupGIUpdate(ComponentRoot &root)
                 uint probeIndex = gl_GlobalInvocationID.x;
                 uint faceIndex = gl_GlobalInvocationID.y;
 
-                vec3 probeSize = gpuProbes[probeIndex].size;
-                vec3 probePos = gpuProbes[probeIndex].position;
-                uint neighborStartInd = gpuProbes[probeIndex].neighborSpecBufStart;
-                uint neighborCount = gpuProbes[probeIndex].neighborSpecCount;
+                // Skip non-leaf probes since they won't be sampled
+                if (gpuProbeRecursions[probeIndex].childIndex[0] == 0) {
+                    vec3 probeSize = gpuProbes[probeIndex].size;
+                    vec3 probePos = gpuProbes[probeIndex].position;
+                    uint neighborStartInd = gpuProbes[probeIndex].neighborSpecBufStart;
+                    uint neighborCount = gpuProbes[probeIndex].neighborSpecCount;
 
-                // reflection
-                gpuProbeStates[probeIndex].illumination[faceIndex] = vec4(0.0);
-                //for (uint reflFaceIndex = 0; reflFaceIndex < 6; reflFaceIndex++) {
-                //    gpuProbeStates[probeIndex].illumination[faceIndex] += (
-                //        gpuProbeStates_prev[probeIndex].illumination[reflFaceIndex] *
-                //        gpuReflectionTransfers[probeIndex].face[reflFaceIndex]
-                //    );
-                //}
-            
-                // if camera is inside probe, glow
-                if (all(lessThan(abs(camera_position - probePos), probeSize * 0.5)) /*&& faceIndex == 0*/) {
-                    gpuProbeStates[probeIndex].illumination[faceIndex] += vec4(camera_light_strength) * (
-                        max(dot(-DIRECTIONS[faceIndex], camera_direction), 0.0)
-                    );
-                } else {
-                }
-                for (uint i = neighborStartInd; i < neighborStartInd + neighborCount; i++) {
-                    uint neighInd = gpuNeighborIndices[i];
-                    for (uint neighDirInd = 0; neighDirInd < 6; neighDirInd++) {
-                        gpuProbeStates[probeIndex].illumination[faceIndex] += (
-                            gpuProbeStates_prev[neighInd].illumination[neighDirInd] *
-                            gpuNeighborFilters[i] *
-                            gpuNeighborTransfers[i].source[neighDirInd].face[faceIndex] *
-                            gpuLeavingPremulFactors[neighInd].face[neighDirInd]
+                    // reflection
+                    gpuProbeStates[probeIndex].illumination[faceIndex] = vec4(0.0);
+                    //for (uint reflFaceIndex = 0; reflFaceIndex < 6; reflFaceIndex++) {
+                    //    gpuProbeStates[probeIndex].illumination[faceIndex] += (
+                    //        gpuProbeStates_prev[probeIndex].illumination[reflFaceIndex] *
+                    //        gpuReflectionTransfers[probeIndex].face[reflFaceIndex]
+                    //    );
+                    //}
+                
+                    // if camera is inside probe, glow
+                    if (all(lessThan(abs(camera_position - probePos), probeSize * 0.5)) /*&& faceIndex == 0*/) {
+                        gpuProbeStates[probeIndex].illumination[faceIndex] += vec4(camera_light_strength) * (
+                            max(dot(-DIRECTIONS[faceIndex], camera_direction), 0.0)
                         );
+                    } else {
                     }
-                }
+                    for (uint i = neighborStartInd; i < neighborStartInd + neighborCount; i++) {
+                        uint neighInd = gpuNeighborIndices[i];
+                        for (uint neighDirInd = 0; neighDirInd < 6; neighDirInd++) {
+                            gpuProbeStates[probeIndex].illumination[faceIndex] += (
+                                gpuProbeStates_prev[neighInd].illumination[neighDirInd] *
+                                gpuNeighborFilters[i] *
+                                gpuNeighborTransfers[i].source[neighDirInd].face[faceIndex] *
+                                gpuLeavingPremulFactors[neighInd].face[neighDirInd]
+                            );
+                        }
+                    }
 
-                // just direct light from camera (debug)
-                /*gpuProbeStates[probeIndex].illumination[faceIndex] = vec4(vec3(
-                    max(min(
-                        dot(DIRECTIONS[faceIndex], normalize(camera_position - gpuProbes[probeIndex].position )) * 100.0 / 
-                        pow(distance(gpuProbes[probeIndex].position, camera_position), 2.0),
-                        1.0), 0.0)
-                ), 1.0);*/
+                    // just direct light from camera (debug)
+                    /*gpuProbeStates[probeIndex].illumination[faceIndex] = vec4(vec3(
+                        max(min(
+                            dot(DIRECTIONS[faceIndex], normalize(camera_position - gpuProbes[probeIndex].position )) * 100.0 / 
+                            pow(distance(gpuProbes[probeIndex].position, camera_position), 2.0),
+                            1.0), 0.0)
+                    ), 1.0);*/
+                }
             )glsl",
         }}),
         ShaderStageFlag::Compute);

@@ -67,7 +67,6 @@ inline void setupGIGeneration(ComponentRoot &root)
         root.getComponent<ShaderSnippetKeeper>().new_asset({ShaderSnippet::StringParams{
             .inputSpecs =
                 {
-                    {"new_giGridSize", TYPE_INFO<glm::uvec3>},
                     {"new_gpuProbes", TYPE_INFO<ProbeBufferPtr>},
                     {"new_gpuNeighborIndices", TYPE_INFO<NeighborIndexBufferPtr>},
 
@@ -88,11 +87,6 @@ inline void setupGIGeneration(ComponentRoot &root)
             .snippet = R"glsl(
                 uint probeIndex = gl_GlobalInvocationID.x;
                 uint myDirInd = gl_GlobalInvocationID.y;
-                uvec3 gridPos = uvec3(
-                    probeIndex / new_giGridSize.y / new_giGridSize.z,
-                    (probeIndex / new_giGridSize.z) % new_giGridSize.y,
-                    probeIndex % new_giGridSize.z
-                );
 
                 uint neighborStartInd = new_gpuProbes[probeIndex].neighborSpecBufStart;
                 uint neighborCount = new_gpuProbes[probeIndex].neighborSpecCount;
@@ -101,13 +95,8 @@ inline void setupGIGeneration(ComponentRoot &root)
                 for (uint i = neighborStartInd; i < neighborStartInd + neighborCount; i++) {
                     uint neighInd = new_gpuNeighborIndices[i];
                     for (uint neighDirInd = 0; neighDirInd < 6; neighDirInd++) {
-                        if (all(lessThan(gridPos, new_giGridSize-2)) &&
-                            all(greaterThan(gridPos, uvec3(1)))) {
-                            
-                            new_gpuNeighborFilters[i] = vec4(1.0);
-                        } else {
-                            new_gpuNeighborFilters[i] = vec4(0);
-                        }
+                        new_gpuNeighborFilters[i] = vec4(1.0);
+                        
                         new_gpuNeighborTransfers[i].
                             source[neighDirInd].face[myDirInd] =
                             factorTo(neighInd, probeIndex, neighDirInd, myDirInd);
@@ -177,7 +166,6 @@ inline void setupGIGeneration(ComponentRoot &root)
                     {"new_gpuNeighborFilters", TYPE_INFO<NeighborFilterBufferPtr>},
                     {"new_giWorldStart", TYPE_INFO<glm::vec3>},
                     {"new_giWorldSize", TYPE_INFO<glm::vec3>},
-                    {"new_giGridSize", TYPE_INFO<glm::uvec3>},
                     {"new_gpuProbeCount", TYPE_INFO<std::uint32_t>},
                     {"new_gpuNeighborCount", TYPE_INFO<std::uint32_t>},
                 },
@@ -288,7 +276,6 @@ inline void setupGIGeneration(ComponentRoot &root)
                     context.properties.set("new_gpuNeighborFilters", gpuNeighborFilters);
                     context.properties.set("new_giWorldStart", worldStart);
                     context.properties.set("new_giWorldSize", sceneAABB.getExtent());
-                    context.properties.set("new_giGridSize", gridSize);
                     context.properties.set("new_gpuProbeCount",
                                            (std::uint32_t)gpuProbes.numElements());
                     context.properties.set("new_gpuNeighborCount",
@@ -350,7 +337,6 @@ inline void setupGIGeneration(ComponentRoot &root)
                     {"gpuNeighborFilters", "new_gpuNeighborFilters"},
                     {"giWorldStart", "new_giWorldStart"},
                     {"giWorldSize", "new_giWorldSize"},
-                    {"giGridSize", "new_giGridSize"},
                     {"gpuProbeCount", "new_gpuProbeCount"},
                     {"gpuNeighborCount", "new_gpuNeighborCount"},
                     {"generated_probe_transfers", "new_generated_probe_transfers"},
@@ -369,7 +355,6 @@ inline void setupGIGeneration(ComponentRoot &root)
                     {"gpuNeighborFilters", TYPE_INFO<NeighborFilterBufferPtr>},
                     {"giWorldStart", TYPE_INFO<glm::vec3>},
                     {"giWorldSize", TYPE_INFO<glm::vec3>},
-                    {"giGridSize", TYPE_INFO<glm::uvec3>},
                     {"gpuProbeCount", TYPE_INFO<std::uint32_t>},
                     {"gpuNeighborCount", TYPE_INFO<std::uint32_t>},
                     {"generated_probe_transfers", TYPE_INFO<void>},
