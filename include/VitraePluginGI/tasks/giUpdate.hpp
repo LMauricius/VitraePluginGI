@@ -52,7 +52,6 @@ inline void setupGIUpdate(ComponentRoot &root)
                     {"gpuNeighborTransfers", TYPE_INFO<NeighborTransferBufferPtr>},
                     {"gpuNeighborFilters", TYPE_INFO<NeighborFilterBufferPtr>},
                     {"gpuLeavingPremulFactors", TYPE_INFO<LeavingPremulFactorBufferPtr>},
-                    {"giWorldSize", TYPE_INFO<glm::vec3>},
                     {"camera_position", TYPE_INFO<glm::vec3>},
                     {"camera_direction", TYPE_INFO<glm::vec3>},
                     {"camera_light_strength", TYPE_INFO<float>, 50.0f},
@@ -87,14 +86,8 @@ inline void setupGIUpdate(ComponentRoot &root)
                     //        gpuReflectionTransfers[probeIndex].face[reflFaceIndex]
                     //    );
                     //}
-                
-                    // if camera is inside probe, glow
-                    if (all(lessThan(abs(camera_position - probePos), probeSize * 0.5)) /*&& faceIndex == 0*/) {
-                        gpuProbeStates[probeIndex].illumination[faceIndex] += vec4(camera_light_strength) * (
-                            max(dot(-DIRECTIONS[faceIndex], camera_direction), 0.0)
-                        );
-                    } else {
-                    }
+
+                    // propagation
                     for (uint i = neighborStartInd; i < neighborStartInd + neighborCount; i++) {
                         uint neighInd = gpuNeighborIndices[i];
                         for (uint neighDirInd = 0; neighDirInd < 6; neighDirInd++) {
@@ -106,14 +99,6 @@ inline void setupGIUpdate(ComponentRoot &root)
                             );
                         }
                     }
-
-                    // just direct light from camera (debug)
-                    /*gpuProbeStates[probeIndex].illumination[faceIndex] = vec4(vec3(
-                        max(min(
-                            dot(DIRECTIONS[faceIndex], normalize(camera_position - gpuProbes[probeIndex].position )) * 100.0 / 
-                            pow(distance(gpuProbes[probeIndex].position, camera_position), 2.0),
-                            1.0), 0.0)
-                    ), 1.0);*/
                 }
             )glsl",
         }}),

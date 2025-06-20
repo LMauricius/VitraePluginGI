@@ -2,6 +2,7 @@
 
 #include "VitraePluginGI/tasks/giGeneration.hpp"
 #include "VitraePluginGI/tasks/giLighting.hpp"
+#include "VitraePluginGI/tasks/giTools.hpp"
 #include "VitraePluginGI/tasks/giUpdate.hpp"
 #include "VitraePluginGI/tasks/giVisualization.hpp"
 
@@ -13,6 +14,7 @@ void setup(Vitrae::ComponentRoot &root)
     setupGILighting(root);
     setupGIUpdate(root);
     setupGIVisualization(root);
+    setupGITools(root);
 }
 
 } // namespace VitraePluginGI
