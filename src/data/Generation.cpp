@@ -69,6 +69,19 @@ const char *const GLSL_PROBE_GEN_SNIPPET = R"glsl(
     const float PI2 = 3.14159265 * 2.0;
     const float LIGHT_ARC_COVERAGE = PI2 / 4;
 
+    float probeWallSize(uint probeindex, uint dirIndex)
+    {
+        vec3 wallDiag = (
+            (vec3(1.0) - abs(DIRECTIONS[dirIndex])) *
+            new_gpuProbes[probeindex].size
+        );
+        vec3 wallDiagNon0 = wallDiag + abs(DIRECTIONS[dirIndex]);
+
+        float wallSize = wallDiagNon0.x * wallDiagNon0.y * wallDiagNon0.z;
+
+        return wallSize;
+    }
+
     float factorTo(uint srcProbeindex, uint dstProbeindex, uint srcDirIndex, uint dstDirIndex)
     {
         // note: we don't need the exact angular surface for the wall, or exact scales here.
@@ -76,7 +89,9 @@ const char *const GLSL_PROBE_GEN_SNIPPET = R"glsl(
         // the shared scalings (such as pi^2 constants) get nullified.
 
         vec3 srcCenter = new_gpuProbes[srcProbeindex].position;
-        vec3 wallCenter = new_gpuProbes[dstProbeindex].position + DIRECTIONS[dstDirIndex] * new_gpuProbes[dstProbeindex].size / 2.0;
+        vec3 wallCenter = (
+            new_gpuProbes[dstProbeindex].position +
+            DIRECTIONS[dstDirIndex] * new_gpuProbes[dstProbeindex].size / 2.0);
 
         vec3 src2wallOffset = wallCenter - srcCenter;
         float src2wallDist = length(src2wallOffset);
@@ -89,12 +104,7 @@ const char *const GLSL_PROBE_GEN_SNIPPET = R"glsl(
             return 0.0;
         }
 
-        float wallSize = 1.0;
-        {
-            vec3 wallDiag = (vec3(1.0) - abs(DIRECTIONS[dstDirIndex])) * new_gpuProbes[dstProbeindex].size;
-            vec3 wallDiagNon0 = wallDiag + abs(DIRECTIONS[dstDirIndex]);
-            wallSize = wallDiagNon0.x * wallDiagNon0.y * wallDiagNon0.z;
-        }
+        float wallSize = probeWallSize(dstProbeindex, dstDirIndex);
 
         float wallAngularSurface = wallSize / (src2wallDist * src2wallDist) * wallDot;
 
@@ -360,9 +370,9 @@ bool areNeighbors(std::vector<H_ProbeDefinition> &probes, std::uint32_t index,
                   std::uint32_t neighIndex)
 {
     glm::vec3 diff = glm::abs(probes[index].position - probes[neighIndex].position);
-    glm::vec3 maxDiff = probes[index].size / 2.0f + probes[neighIndex].size / 2.0f;
+    glm::vec3 maxDiff = (probes[index].size + probes[neighIndex].size) * 0.5f;
 
-    return glm::all(glm::lessThanEqual(diff, maxDiff + 0.01f));
+    return glm::all(glm::lessThanEqual(diff, maxDiff * 1.5f));
 }
 
 void extractChildNeighbors(std::vector<H_ProbeDefinition> &probes, std::uint32_t index,
@@ -489,9 +499,8 @@ void generateProbeList(std::span<const Sample> samples, glm::vec3 worldCenter, g
             if (probes[i].recursion.depth < maxDepth && probes[i].size.x > minProbeSize &&
                 probes[i].size.y > minProbeSize && probes[i].size.z > minProbeSize &&
                 probes[i].sampleCache.sampleCount != glm::uvec3{0, 0, 0}) {
-                splitProbe(probes, i,
-                           probes[i].sampleCache.positionSum /
-                               glm::vec3(probes[i].sampleCache.sampleCount));
+                splitProbe(probes, i, probes[i].position);
+                // probes[i].sampleCache.positionSum / glm::vec3(probes[i].sampleCache.sampleCount)
                 needsReprocess = true;
             }
         }
