@@ -463,8 +463,17 @@ void generateChildNeighbors(std::vector<H_ProbeDefinition> &probes, std::uint32_
 void addSample(Sample sample, std::vector<H_ProbeDefinition> &probes, std::uint32_t index)
 {
     if (probes[index].recursion.childIndex[0][0][0] == 0) {
-        probes[index].sampleCache.positionSum += sample.position;
-        probes[index].sampleCache.sampleCount += glm::uvec3{1, 1, 1};
+        glm::vec3 absNorm = glm::abs(sample.normal);
+        if (absNorm.x > absNorm.y && absNorm.x > absNorm.z) {
+            probes[index].sampleCache.positionSum.x += sample.position.x;
+            probes[index].sampleCache.sampleCount.x += 1;
+        } else if (absNorm.y > absNorm.x && absNorm.y > absNorm.z) {
+            probes[index].sampleCache.positionSum.y += sample.position.y;
+            probes[index].sampleCache.sampleCount.y += 1;
+        } else {
+            probes[index].sampleCache.positionSum.z += sample.position.z;
+            probes[index].sampleCache.sampleCount.z += 1;
+        }
     } else {
         bool x = sample.position.x > probes[index].recursion.pivot.x;
         bool y = sample.position.y > probes[index].recursion.pivot.y;
@@ -474,7 +483,7 @@ void addSample(Sample sample, std::vector<H_ProbeDefinition> &probes, std::uint3
 }
 
 void generateProbeList(std::span<const Sample> samples, glm::vec3 worldCenter, glm::vec3 worldSize,
-                       float minProbeSize, std::uint32_t maxDepth,
+                       float minProbeSize, std::uint32_t maxDepth, bool useDenormalizedCells,
                        std::vector<H_ProbeDefinition> &probes, glm::vec3 &worldStart)
 {
     MMETER_FUNC_PROFILER;
@@ -511,12 +520,43 @@ void generateProbeList(std::span<const Sample> samples, glm::vec3 worldCenter, g
 
         // find whether some of the new probes should be split
         for (std::uint32_t i = newIndicesStart; i < newIndicesEnd; i++) {
-            if (probes[i].recursion.depth < maxDepth && probes[i].size.x > minProbeSize &&
-                probes[i].size.y > minProbeSize && probes[i].size.z > minProbeSize &&
+            if (probes[i].recursion.depth < maxDepth &&
                 probes[i].sampleCache.sampleCount != glm::uvec3{0, 0, 0}) {
-                splitProbe(probes, i, probes[i].position);
-                // probes[i].sampleCache.positionSum / glm::vec3(probes[i].sampleCache.sampleCount)
-                needsReprocess = true;
+
+                glm::vec3 pivot;
+                if (useDenormalizedCells) {
+                    float centerFactor = 0.01;
+
+                    pivot =
+                        (probes[i].sampleCache.positionSum + centerFactor * probes[i].position) /
+                        (glm::vec3(probes[i].sampleCache.sampleCount) + centerFactor);
+                } else {
+                    pivot = probes[i].position;
+                }
+
+                if (std::min(probes[i].size.x, std::min(probes[i].size.y, probes[i].size.z)) /
+                        2.0f >=
+                    minProbeSize) {
+
+                    glm::vec3 minCorner = probes[i].position - probes[i].size / 2.0f;
+                    glm::vec3 maxCorner = probes[i].position + probes[i].size / 2.0f;
+
+                    if (pivot.x - minCorner.x < minProbeSize)
+                        pivot.x = minCorner.x + minProbeSize;
+                    else if (maxCorner.x - pivot.x < minProbeSize)
+                        pivot.x = maxCorner.x - minProbeSize;
+                    if (pivot.y - minCorner.y < minProbeSize)
+                        pivot.y = minCorner.y + minProbeSize;
+                    else if (maxCorner.y - pivot.y < minProbeSize)
+                        pivot.y = maxCorner.y - minProbeSize;
+                    if (pivot.z - minCorner.z < minProbeSize)
+                        pivot.z = minCorner.z + minProbeSize;
+                    else if (maxCorner.z - pivot.z < minProbeSize)
+                        pivot.z = maxCorner.z - minProbeSize;
+
+                    splitProbe(probes, i, pivot);
+                    needsReprocess = true;
+                }
             }
         }
 

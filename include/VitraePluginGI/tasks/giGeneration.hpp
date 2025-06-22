@@ -156,6 +156,7 @@ inline void setupGIGeneration(ComponentRoot &root)
                     StandardParam::scene,
                     {"numGISamples", TYPE_INFO<std::size_t>, (std::size_t)30000},
                     {"maxGIDepth", TYPE_INFO<std::uint32_t>, (std::uint32_t)5},
+                    {"useDenormalizedCells", TYPE_INFO<bool>, false},
                     {"minProbeSize", TYPE_INFO<float>, 1.5f},
                 },
             .outputSpecs =
@@ -184,6 +185,9 @@ inline void setupGIGeneration(ComponentRoot &root)
 
                     std::uint32_t maxGIDepth =
                         context.properties.get("maxGIDepth").get<std::uint32_t>();
+
+                    bool useDenormalizedCells =
+                        context.properties.get("useDenormalizedCells").get<bool>();
 
                     float minProbeSize = context.properties.get("minProbeSize").get<float>();
 
@@ -244,8 +248,8 @@ inline void setupGIGeneration(ComponentRoot &root)
                     std::vector<Sample> samples;
                     sampleScene(smpScene, numGISamples, samples);
                     generateProbeList(std::span<const Sample>(samples), sceneAABB.getCenter(),
-                                      sceneAABB.getExtent(), minProbeSize, maxGIDepth, probes,
-                                      worldStart);
+                                      sceneAABB.getExtent(), minProbeSize, maxGIDepth,
+                                      useDenormalizedCells, probes, worldStart);
                     convertHost2GpuBuffers(probes, gpuProbes, gpuProbeRecursions,
                                            gpuReflectionTransfers, gpuLeavingPremulFactors,
                                            gpuNeighborIndices, gpuNeighborOwnerIndices,
