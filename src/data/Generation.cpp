@@ -103,8 +103,6 @@ const char *const GLSL_PROBE_GEN_SNIPPET = R"glsl(
             gpuProbes[dstProbeindex].position +
             DIRECTIONS[dstDirIndex] * gpuProbes[dstProbeindex].size / 2.0);
         
-        //vec3 src2boundaryOffset = boundaryCenter - srcCenter;
-        //float src2boundaryDist = length(src2boundaryOffset);
         const float src2boundaryDist = 0.5;
 
         vec3 src2dstOffset = (dstCenter - srcCenter) / gpuProbes[srcProbeindex].size;
@@ -119,14 +117,9 @@ const char *const GLSL_PROBE_GEN_SNIPPET = R"glsl(
         }
 
         const float boundarySurface = 1.0;//probeWallSurface(srcProbeindex, srcDirIndex);
-        //const float boundaryProjectedSurface = boundarySurface / (src2boundaryDist * src2boundaryDist);
         const float boundaryArcLength = arcLength(sqrt(boundarySurface), src2boundaryDist);
 
         float dstArcOffset = arcOffset(DIRECTIONS[srcDirIndex], src2dstDir);
-
-        //if (dstArcOffset > boundaryArcLength) {
-        //    return 0.0;
-        //}
 
         vec3 dstConvertedSize = gpuProbes[dstProbeindex].size / gpuProbes[srcProbeindex].size;
         float dstSurface = (dstConvertedSize.yzx * dstConvertedSize.zxy)[AXES[dstDirIndex]];
