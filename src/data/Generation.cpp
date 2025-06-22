@@ -69,54 +69,75 @@ const char *const GLSL_PROBE_GEN_SNIPPET = R"glsl(
     const float PI2 = 3.14159265 * 2.0;
     const float LIGHT_ARC_COVERAGE = PI2 / 4;
 
-    float probeWallSize(uint probeindex, uint dirIndex)
+    vec3 probeWallSurfaces(uint probeindex)
     {
-        vec3 wallDiag = (
-            (vec3(1.0) - abs(DIRECTIONS[dirIndex])) *
-            new_gpuProbes[probeindex].size
-        );
-        vec3 wallDiagNon0 = wallDiag + abs(DIRECTIONS[dirIndex]);
+        vec3 dim = gpuProbes[probeindex].size;
 
-        float wallSize = wallDiagNon0.x * wallDiagNon0.y * wallDiagNon0.z;
+        return dim.yzx * dim.zxy;
+    }
 
-        return wallSize;
+    float probeWallSurface(uint probeindex, uint dirIndex)
+    {
+        return probeWallSurfaces(probeindex)[AXES[dirIndex]];
+    }
+
+    float arcLength(float visibleLength) {
+        return visibleLength / PI2; 
+    }
+
+    float arcLength(float len, float distance) {
+        return len / (PI2 * distance * distance); 
+    }
+
+    float arcOffset(vec3 baseDir, vec3 targetDir) {
+        return abs(acos(dot(baseDir, targetDir)));
     }
 
     float factorTo(uint srcProbeindex, uint dstProbeindex, uint srcDirIndex, uint dstDirIndex)
     {
-        // note: we don't need the exact angular surface for the wall, or exact scales here.
+        // note: we don't need the exact angular surface for the dst, or exact scales here.
         // Since the total leaving amounts get normalized,
         // the shared scalings (such as pi^2 constants) get nullified.
 
-        vec3 srcCenter = new_gpuProbes[srcProbeindex].position;
-        vec3 wallCenter = (
-            new_gpuProbes[dstProbeindex].position +
-            DIRECTIONS[dstDirIndex] * new_gpuProbes[dstProbeindex].size / 2.0);
+        vec3 srcCenter = gpuProbes[srcProbeindex].position;
+        vec3 boundaryCenter = (
+            gpuProbes[srcProbeindex].position +
+            DIRECTIONS[srcDirIndex] * gpuProbes[srcProbeindex].size / 2.0);
+        vec3 dstCenter = (
+            gpuProbes[dstProbeindex].position +
+            DIRECTIONS[dstDirIndex] * gpuProbes[dstProbeindex].size / 2.0);
+        
+        //vec3 src2boundaryOffset = boundaryCenter - srcCenter;
+        //float src2boundaryDist = length(src2boundaryOffset);
+        const float src2boundaryDist = 0.5;
 
-        vec3 src2wallOffset = wallCenter - srcCenter;
-        float src2wallDist = length(src2wallOffset);
-        vec3 src2wallDir = src2wallOffset / src2wallDist;
+        vec3 src2dstOffset = (dstCenter - srcCenter) / gpuProbes[srcProbeindex].size;
+        float src2dstDist = length(src2dstOffset);
+        vec3 src2dstDir = src2dstOffset / src2dstDist;
 
-        float wallDot = dot(src2wallDir, DIRECTIONS[dstDirIndex]);
-        float lightDot = dot(src2wallDir, DIRECTIONS[srcDirIndex]);
+        float dstDot = dot(src2dstDir, DIRECTIONS[dstDirIndex]);
+        float lightDot = dot(src2dstDir, DIRECTIONS[srcDirIndex]);
 
-        if (wallDot <= 0.0 || lightDot <= 0.0) {
+        if (dstDot <= 0.0 || lightDot <= 0.0) {
             return 0.0;
         }
 
-        float wallSize = probeWallSize(dstProbeindex, dstDirIndex);
+        const float boundarySurface = 1.0;//probeWallSurface(srcProbeindex, srcDirIndex);
+        const float boundaryProjectedSurface = boundarySurface / (src2boundaryDist * src2boundaryDist);
+        float boundaryArcLength = arcLength(sqrt(boundaryProjectedSurface));
 
-        float wallAngularSurface = wallSize / (src2wallDist * src2wallDist) * wallDot;
+        vec3 dstConvertedSize = gpuProbes[dstProbeindex].size / gpuProbes[srcProbeindex].size;
+        float dstSurface = (dstConvertedSize.yzx * dstConvertedSize.zxy)[AXES[dstDirIndex]];
+        float dstProjectedSurface = dstSurface / (src2dstDist * src2dstDist) * dstDot;
+        float dstArcLength = arcLength(sqrt(dstProjectedSurface)) / 4.0;
+        float dstArcOffset = arcOffset(DIRECTIONS[srcDirIndex], src2dstDir)/4.0;
 
-        float wallArcCoverage = sqrt(wallSize) / (PI2 * src2wallDist) * wallDot;
-        float wallArcOffset = abs(acos(lightDot));
-
-        float wallArcStart = wallArcOffset - wallArcCoverage / 2.0;
-        float wallArcEnd = wallArcOffset + wallArcCoverage / 2.0;
+        float dstArcStart = dstArcOffset - dstArcLength / 2.0;
+        float dstArcEnd = dstArcOffset + dstArcLength / 2.0;
         float visibleAmount =
-            max(min(LIGHT_ARC_COVERAGE / 2.0, wallArcEnd), 0.0) / wallArcCoverage;
+            max(min(boundaryArcLength / 2.0, dstArcEnd) - dstArcStart, 0.0) / dstArcLength;
 
-        return max(visibleAmount * wallAngularSurface, 0.0);
+        return max(visibleAmount * dstProjectedSurface, 0.0);
     }
 )glsl";
 

@@ -55,13 +55,13 @@ inline void setupGIGeneration(ComponentRoot &root)
             .inputSpecs =
                 {
                     {"gi_utilities", TYPE_INFO<void>},
-                    {"new_gpuProbes", TYPE_INFO<ProbeBufferPtr>},
+                    {"gpuProbes", TYPE_INFO<ProbeBufferPtr>},
                 },
             .outputSpecs = {{"gi_probegen", TYPE_INFO<void>}},
             .snippet = GLSL_PROBE_GEN_SNIPPET,
             .friendlyName = "GI generation utils",
         }}),
-        ShaderStageFlag::Compute);
+        ShaderStageFlag::Compute | ShaderStageFlag::Fragment | ShaderStageFlag::Vertex);
 
     methodCollection.registerShaderTask(
         root.getComponent<ShaderSnippetKeeper>().new_asset({ShaderSnippet::StringParams{

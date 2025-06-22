@@ -75,6 +75,7 @@ inline void setupGILighting(ComponentRoot &root)
             .inputSpecs =
                 {
                     {"declared_probe_search", TYPE_INFO<void>},
+                    {"gi_probegen", TYPE_INFO<void>},
                     {"gpuProbes", TYPE_INFO<ProbeBufferPtr>},
                     {"gpuProbeStates", TYPE_INFO<ProbeStateBufferPtr>},
                     {"position_world", TYPE_INFO<glm::vec4>},
@@ -88,7 +89,7 @@ inline void setupGILighting(ComponentRoot &root)
                 uint ind = getDeepestProbe(position_world.xyz / position_world.w);
                 
                 bvec3 normalIsNeg = lessThan(-normal_fragment_normalized, vec3(0.0));
-                vec3 absNormal = abs(normal_fragment_normalized);
+                vec3 absNormal = abs(normal_fragment_normalized) / probeWallSurfaces(ind);
 
                 shade_gi_ambient = 
                     gpuProbeStates[ind].illumination[
