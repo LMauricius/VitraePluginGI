@@ -81,12 +81,8 @@ const char *const GLSL_PROBE_GEN_SNIPPET = R"glsl(
         return probeWallSurfaces(probeindex)[AXES[dirIndex]];
     }
 
-    float arcLength(float visibleLength) {
-        return visibleLength / PI2; 
-    }
-
     float arcLength(float len, float distance) {
-        return len / (PI2 * distance * distance); 
+        return len / (distance * distance); 
     }
 
     float arcOffset(vec3 baseDir, vec3 targetDir) {
@@ -123,21 +119,26 @@ const char *const GLSL_PROBE_GEN_SNIPPET = R"glsl(
         }
 
         const float boundarySurface = 1.0;//probeWallSurface(srcProbeindex, srcDirIndex);
-        const float boundaryProjectedSurface = boundarySurface / (src2boundaryDist * src2boundaryDist);
-        float boundaryArcLength = arcLength(sqrt(boundaryProjectedSurface));
+        //const float boundaryProjectedSurface = boundarySurface / (src2boundaryDist * src2boundaryDist);
+        const float boundaryArcLength = arcLength(sqrt(boundarySurface), src2boundaryDist);
+
+        float dstArcOffset = arcOffset(DIRECTIONS[srcDirIndex], src2dstDir);
+
+        //if (dstArcOffset > boundaryArcLength) {
+        //    return 0.0;
+        //}
 
         vec3 dstConvertedSize = gpuProbes[dstProbeindex].size / gpuProbes[srcProbeindex].size;
         float dstSurface = (dstConvertedSize.yzx * dstConvertedSize.zxy)[AXES[dstDirIndex]];
         float dstProjectedSurface = dstSurface / (src2dstDist * src2dstDist) * dstDot;
-        float dstArcLength = arcLength(sqrt(dstProjectedSurface)) / 4.0;
-        float dstArcOffset = arcOffset(DIRECTIONS[srcDirIndex], src2dstDir)/4.0;
+        float dstArcLength = sqrt(dstProjectedSurface);
 
         float dstArcStart = dstArcOffset - dstArcLength / 2.0;
         float dstArcEnd = dstArcOffset + dstArcLength / 2.0;
         float visibleAmount =
             max(min(boundaryArcLength / 2.0, dstArcEnd) - dstArcStart, 0.0) / dstArcLength;
 
-        return max(visibleAmount * dstProjectedSurface, 0.0);
+        return visibleAmount * dstProjectedSurface;
     }
 )glsl";
 
