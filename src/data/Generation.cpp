@@ -522,9 +522,9 @@ void addSample(Sample sample, std::vector<H_ProbeDefinition> &probes, std::uint3
 }
 
 void generateProbeList(std::span<const Sample> samples, glm::vec3 worldCenter, glm::vec3 worldSize,
-                       float minProbeSize, std::uint32_t maxDepth, bool useDenormalizedCells,
-                       bool useQuadTree, std::vector<H_ProbeDefinition> &probes,
-                       glm::vec3 &worldStart)
+                       float minProbeSize, float maxProbeBias, std::uint32_t maxDepth,
+                       bool useDenormalizedCells, bool useQuadTree,
+                       std::vector<H_ProbeDefinition> &probes, glm::vec3 &worldStart)
 {
     MMETER_FUNC_PROFILER;
 
@@ -555,13 +555,27 @@ void generateProbeList(std::span<const Sample> samples, glm::vec3 worldCenter, g
 
         // Put samples in new (and some old) probes
         for (auto &sample : samples) {
-            addSample(sample, probes, 0);
+            addSample(
+                Sample{
+                    .position = sample.position + sample.normal * minProbeSize * 0.5f,
+                    .normal = sample.normal,
+                    .color = sample.color,
+                },
+                probes, 0);
         }
 
         // find whether some of the new probes should be split
         for (std::uint32_t i = newIndicesStart; i < newIndicesEnd; i++) {
             if (probes[i].recursion.depth < maxDepth &&
-                probes[i].sampleCache.sampleCount != glm::uvec3{0, 0, 0}) {
+                probes[i].sampleCache.sampleCount != glm::uvec3{0, 0, 0} &&
+                ((!useQuadTree &&
+                  std::min(probes[i].size.x, std::min(probes[i].size.y, probes[i].size.z)) / 2.0f >=
+                      minProbeSize) ||
+                 (useQuadTree && std::max(std::min(probes[i].size.x, probes[i].size.y),
+                                          std::min(std::max(probes[i].size.x, probes[i].size.y),
+                                                   probes[i].size.z)) /
+                                         2.0f >=
+                                     minProbeSize))) {
 
                 glm::vec3 pivot;
                 if (useDenormalizedCells) {
@@ -574,29 +588,27 @@ void generateProbeList(std::span<const Sample> samples, glm::vec3 worldCenter, g
                     pivot = probes[i].position;
                 }
 
-                if (std::min(probes[i].size.x, std::min(probes[i].size.y, probes[i].size.z)) /
-                        2.0f >=
-                    minProbeSize) {
+                glm::vec3 minCorner = probes[i].position - probes[i].size / 2.0f;
+                glm::vec3 maxCorner = probes[i].position + probes[i].size / 2.0f;
 
-                    glm::vec3 minCorner = probes[i].position - probes[i].size / 2.0f;
-                    glm::vec3 maxCorner = probes[i].position + probes[i].size / 2.0f;
+                glm::vec3 curMinProbeSizes =
+                    glm::max(glm::vec3(minProbeSize), (1.0f - maxProbeBias) * probes[i].size);
 
-                    if (pivot.x - minCorner.x < minProbeSize)
-                        pivot.x = minCorner.x + minProbeSize;
-                    else if (maxCorner.x - pivot.x < minProbeSize)
-                        pivot.x = maxCorner.x - minProbeSize;
-                    if (pivot.y - minCorner.y < minProbeSize)
-                        pivot.y = minCorner.y + minProbeSize;
-                    else if (maxCorner.y - pivot.y < minProbeSize)
-                        pivot.y = maxCorner.y - minProbeSize;
-                    if (pivot.z - minCorner.z < minProbeSize)
-                        pivot.z = minCorner.z + minProbeSize;
-                    else if (maxCorner.z - pivot.z < minProbeSize)
-                        pivot.z = maxCorner.z - minProbeSize;
+                if (pivot.x - minCorner.x < curMinProbeSizes.x)
+                    pivot.x = minCorner.x + curMinProbeSizes.x;
+                else if (maxCorner.x - pivot.x < curMinProbeSizes.x)
+                    pivot.x = maxCorner.x - curMinProbeSizes.x;
+                if (pivot.y - minCorner.y < curMinProbeSizes.y)
+                    pivot.y = minCorner.y + curMinProbeSizes.y;
+                else if (maxCorner.y - pivot.y < curMinProbeSizes.y)
+                    pivot.y = maxCorner.y - curMinProbeSizes.y;
+                if (pivot.z - minCorner.z < curMinProbeSizes.z)
+                    pivot.z = minCorner.z + curMinProbeSizes.z;
+                else if (maxCorner.z - pivot.z < curMinProbeSizes.z)
+                    pivot.z = maxCorner.z - curMinProbeSizes.z;
 
-                    splitProbe(probes, i, pivot, useQuadTree);
-                    needsReprocess = true;
-                }
+                splitProbe(probes, i, pivot, useQuadTree);
+                needsReprocess = true;
             }
         }
 

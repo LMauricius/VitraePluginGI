@@ -50,9 +50,9 @@ void sampleScene(const SamplingScene &smpScene, std::size_t numSamples,
                  std::vector<Sample> &outSamples);
 
 void generateProbeList(std::span<const Sample> samples, glm::vec3 worldCenter, glm::vec3 worldSize,
-                       float minProbeSize, std::uint32_t maxDepth, bool useDenormalizedCells,
-                       bool useQuadTree, std::vector<H_ProbeDefinition> &probes,
-                       glm::vec3 &worldStart);
+                       float minProbeSize, float maxProbeBias, std::uint32_t maxDepth,
+                       bool useDenormalizedCells, bool useQuadTree,
+                       std::vector<H_ProbeDefinition> &probes, glm::vec3 &worldStart);
 
 void generateTransfers(std::vector<H_ProbeDefinition> &probes,
                        NeighborTransferBufferPtr gpuNeighborTransfers,
