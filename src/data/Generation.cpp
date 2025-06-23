@@ -13,6 +13,8 @@
 
 #include <random>
 
+#include <iostream>
+
 namespace VitraePluginGI
 {
 
@@ -338,33 +340,62 @@ void sampleScene(const SamplingScene &smpScene, std::size_t numSamples,
     }
 }
 
-void splitProbe(std::vector<H_ProbeDefinition> &probes, std::uint32_t index, glm::vec3 pivot)
+void splitProbe(std::vector<H_ProbeDefinition> &probes, std::uint32_t index, glm::vec3 pivot,
+                bool useQuadTree)
 {
+    int minAxisInd;
+    if (useQuadTree) {
+        // for quadtree: select two largest dimensions
+        if (probes[index].size.x < probes[index].size.y) {
+            if (probes[index].size.x < probes[index].size.z) {
+                minAxisInd = 0;
+            } else {
+                minAxisInd = 2;
+            }
+        } else {
+            if (probes[index].size.y < probes[index].size.z) {
+                minAxisInd = 1;
+            } else {
+                minAxisInd = 2;
+            }
+        }
+
+        // put it outside the cell
+        pivot[minAxisInd] = probes[index].position[minAxisInd] + probes[index].size[minAxisInd];
+    }
+
     probes[index].recursion.pivot = pivot;
 
-    if (!(pivot.x > probes[index].position.x - probes[index].size.x &&
-          pivot.x < probes[index].position.x + probes[index].size.x))
-        pivot.x = probes[index].position.x;
-    if (!(pivot.y > probes[index].position.y - probes[index].size.y &&
-          pivot.y < probes[index].position.y + probes[index].size.y))
-        pivot.y = probes[index].position.y;
-    if (!(pivot.z > probes[index].position.z - probes[index].size.z &&
-          pivot.z < probes[index].position.z + probes[index].size.z))
-        pivot.z = probes[index].position.z;
-
     for (bool x : {0, 1}) {
+        if (useQuadTree && minAxisInd == 0 && x)
+            continue;
+
         for (bool y : {0, 1}) {
+            if (useQuadTree && minAxisInd == 1 && y)
+                continue;
+
             for (bool z : {0, 1}) {
+                if (useQuadTree && minAxisInd == 2 && z)
+                    continue;
+
                 glm::vec3 parentCorner =
                     probes[index].position +
                     0.5f * glm::vec3(x ? probes[index].size.x : -probes[index].size.x,
                                      y ? probes[index].size.y : -probes[index].size.y,
                                      z ? probes[index].size.z : -probes[index].size.z);
+                glm::vec3 childPosition = (pivot + parentCorner) / 2.0f;
+                glm::vec3 childSize = glm::abs(pivot - parentCorner);
+
+                // For quadtree, extend the children on non-divided axes to the full parent
+                if (useQuadTree) {
+                    childPosition[minAxisInd] = probes[index].position[minAxisInd];
+                    childSize[minAxisInd] = probes[index].size[minAxisInd];
+                }
 
                 probes[index].recursion.childIndex[x][y][z] = probes.size();
                 probes.push_back(H_ProbeDefinition{
-                    .position = (pivot + parentCorner) / 2.0f,
-                    .size = glm::abs(pivot - parentCorner),
+                    .position = childPosition,
+                    .size = childSize,
                     .recursion{
                         .pivot = {0.0f, 0.0f, 0.0f},
                         .depth = probes[index].recursion.depth + 1,
@@ -440,6 +471,10 @@ void generateChildNeighbors(std::vector<H_ProbeDefinition> &probes, std::uint32_
                             if (x2 == x && y2 == y && z2 == z) {
                                 continue;
                             }
+                            if (probes[index].recursion.childIndex[x2][y2][z2] == 0) {
+                                continue;
+                            }
+
                             extractChildNeighbors(probes, childIndex,
                                                   probes[index].recursion.childIndex[x2][y2][z2]);
                         }
@@ -478,13 +513,18 @@ void addSample(Sample sample, std::vector<H_ProbeDefinition> &probes, std::uint3
         bool x = sample.position.x > probes[index].recursion.pivot.x;
         bool y = sample.position.y > probes[index].recursion.pivot.y;
         bool z = sample.position.z > probes[index].recursion.pivot.z;
-        addSample(sample, probes, probes[index].recursion.childIndex[x][y][z]);
+        if (probes[index].recursion.childIndex[x][y][z] == 0) {
+            std::cout << "Error: No child index @addSample" << std::endl;
+        } else {
+            addSample(sample, probes, probes[index].recursion.childIndex[x][y][z]);
+        }
     }
 }
 
 void generateProbeList(std::span<const Sample> samples, glm::vec3 worldCenter, glm::vec3 worldSize,
                        float minProbeSize, std::uint32_t maxDepth, bool useDenormalizedCells,
-                       std::vector<H_ProbeDefinition> &probes, glm::vec3 &worldStart)
+                       bool useQuadTree, std::vector<H_ProbeDefinition> &probes,
+                       glm::vec3 &worldStart)
 {
     MMETER_FUNC_PROFILER;
 
@@ -554,7 +594,7 @@ void generateProbeList(std::span<const Sample> samples, glm::vec3 worldCenter, g
                     else if (maxCorner.z - pivot.z < minProbeSize)
                         pivot.z = maxCorner.z - minProbeSize;
 
-                    splitProbe(probes, i, pivot);
+                    splitProbe(probes, i, pivot, useQuadTree);
                     needsReprocess = true;
                 }
             }

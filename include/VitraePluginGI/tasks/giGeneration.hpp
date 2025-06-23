@@ -157,6 +157,7 @@ inline void setupGIGeneration(ComponentRoot &root)
                     {"numGISamples", TYPE_INFO<std::size_t>, (std::size_t)30000},
                     {"maxGIDepth", TYPE_INFO<std::uint32_t>, (std::uint32_t)5},
                     {"useDenormalizedCells", TYPE_INFO<bool>, false},
+                    {"useQuadTree", TYPE_INFO<bool>, false},
                     {"minProbeSize", TYPE_INFO<float>, 1.5f},
                 },
             .outputSpecs =
@@ -188,6 +189,8 @@ inline void setupGIGeneration(ComponentRoot &root)
 
                     bool useDenormalizedCells =
                         context.properties.get("useDenormalizedCells").get<bool>();
+
+                    bool useQuadTree = context.properties.get("useQuadTree").get<bool>();
 
                     float minProbeSize = context.properties.get("minProbeSize").get<float>();
 
@@ -249,7 +252,7 @@ inline void setupGIGeneration(ComponentRoot &root)
                     sampleScene(smpScene, numGISamples, samples);
                     generateProbeList(std::span<const Sample>(samples), sceneAABB.getCenter(),
                                       sceneAABB.getExtent(), minProbeSize, maxGIDepth,
-                                      useDenormalizedCells, probes, worldStart);
+                                      useDenormalizedCells, useQuadTree, probes, worldStart);
                     convertHost2GpuBuffers(probes, gpuProbes, gpuProbeRecursions,
                                            gpuReflectionTransfers, gpuLeavingPremulFactors,
                                            gpuNeighborIndices, gpuNeighborOwnerIndices,

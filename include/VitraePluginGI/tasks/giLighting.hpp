@@ -59,9 +59,14 @@ inline void setupGILighting(ComponentRoot &root)
                             gpuProbeRecursions[currentProbe].pivot,
                             pointPosition
                         );
-                        currentProbe = gpuProbeRecursions[currentProbe].childIndex[
+                        uint nextProbe = gpuProbeRecursions[currentProbe].childIndex[
                             (childIndPos.x? 4:0) + (childIndPos.y? 2:0) + (childIndPos.z? 1:0)
                         ];
+                        if (nextProbe == 0) {
+                            break;
+                        }
+
+                        currentProbe = nextProbe;
                     }
                     
                     return currentProbe;
