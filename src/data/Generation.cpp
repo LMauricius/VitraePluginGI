@@ -686,29 +686,20 @@ void generateProbeList(std::span<const Sample> samples, glm::vec3 worldCenter, g
     worldStart = probes[0].position - probes[0].size / 2.0f;
 }
 
-void generateTransfers(std::vector<H_ProbeDefinition> &probes,
-                       NeighborTransferBufferPtr gpuNeighborTransfers,
+void generateTransfers(std::span<const Sample> samples,
+                       std::span<const H_ProbeDefinition> hostProbes, ProbeBufferPtr gpuProbes,
                        NeighborFilterBufferPtr gpuNeighborFilters)
 {
     MMETER_SCOPE_PROFILER("Transfer gen");
 
-    for (auto &probe : probes) {
-        for (int myDirInd = 0; myDirInd < 6; myDirInd++) {
-            float totalLeaving = 0.0;
-            for (int neighDirInd = 0; neighDirInd < 6; neighDirInd++) {
-                for (auto neighIndex : probe.neighborIndices) {
+    auto neighborFilters = gpuNeighborFilters.getMutableElements();
 
-                    auto &neighTrans = gpuNeighborTransfers.getMutableElement(neighIndex);
-                    auto &neighFilter = gpuNeighborFilters.getMutableElement(neighIndex);
+    for (std::size_t i = 0; i < hostProbes.size(); i++) {
+        auto &hostProbe = hostProbes[i];
+        auto &gpuProbe = gpuProbes.getElement(i);
 
-                    neighTrans.source[neighDirInd].face[myDirInd] =
-                        factorTo(probes[neighIndex], probe, neighDirInd, myDirInd);
-                    neighFilter = glm::vec4(1.0f);
-                    totalLeaving += factorTo(probe, probes[neighIndex], myDirInd, neighDirInd);
-                }
-            }
-
-            probe.leavingPremulFactor.face[myDirInd] = 1.0f / totalLeaving;
+        for (std::size_t j = 0; j < gpuProbe.neighborSpecCount; j++) {
+            neighborFilters[gpuProbe.neighborSpecBufStart + j] = glm::vec4(1.0f);
         }
     }
 }

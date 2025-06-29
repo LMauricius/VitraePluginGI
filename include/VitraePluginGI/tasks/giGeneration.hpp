@@ -95,7 +95,7 @@ inline void setupGIGeneration(ComponentRoot &root)
                 for (uint i = neighborStartInd; i < neighborStartInd + neighborCount; i++) {
                     uint neighInd = new_gpuNeighborIndices[i];
                     for (uint neighDirInd = 0; neighDirInd < 6; neighDirInd++) {
-                        new_gpuNeighborFilters[i] = vec4(1.0);
+                        //new_gpuNeighborFilters[i] = vec4(1.0);
                         
                         new_gpuNeighborTransfers[i].
                             source[neighDirInd].face[myDirInd] =
@@ -260,7 +260,8 @@ inline void setupGIGeneration(ComponentRoot &root)
                                            gpuReflectionTransfers, gpuLeavingPremulFactors,
                                            gpuNeighborIndices, gpuNeighborOwnerIndices,
                                            gpuNeighborTransfers, gpuNeighborFilters);
-                    // generateTransfers(probes, gpuNeighborTransfers, gpuNeighborFilters);
+                    generateTransfers(std::span<const Sample>(samples), probes, gpuProbes,
+                                      gpuNeighborFilters);
 
                     gpuProbeStates.resizeElements(probes.size());
                     for (std::size_t i = 0; i < probes.size(); ++i) {

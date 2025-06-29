@@ -54,7 +54,7 @@ void generateProbeList(std::span<const Sample> samples, glm::vec3 worldCenter, g
                        bool useDenormalizedCells, bool useQuadTree,
                        std::vector<H_ProbeDefinition> &probes, glm::vec3 &worldStart);
 
-void generateTransfers(std::vector<H_ProbeDefinition> &probes,
-                       NeighborTransferBufferPtr gpuNeighborTransfers,
+void generateTransfers(std::span<const Sample> samples,
+                       std::span<const H_ProbeDefinition> hostProbes, ProbeBufferPtr gpuProbes,
                        NeighborFilterBufferPtr gpuNeighborFilters);
-} // namespace GI
+} // namespace VitraePluginGI
