@@ -55,6 +55,8 @@ void generateProbeList(std::span<const Sample> samples, glm::vec3 worldCenter, g
                        std::vector<H_ProbeDefinition> &probes, glm::vec3 &worldStart);
 
 void generateTransfers(std::span<const Sample> samples,
-                       std::span<const H_ProbeDefinition> hostProbes, ProbeBufferPtr gpuProbes,
-                       NeighborFilterBufferPtr gpuNeighborFilters);
+                       std::span<const H_ProbeDefinition> hostProbes,
+                       std::span<const G_ProbeDefinition> probes,
+                       std::span<const std::uint32_t> neighborIndices,
+                       std::span<glm::vec4> neighborFilters);
 } // namespace VitraePluginGI

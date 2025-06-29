@@ -686,21 +686,79 @@ void generateProbeList(std::span<const Sample> samples, glm::vec3 worldCenter, g
     worldStart = probes[0].position - probes[0].size / 2.0f;
 }
 
+void blockWSample(const Sample &sample, std::span<const G_ProbeDefinition> gpuProbes,
+                  std::span<const std::uint32_t> neighborIndices,
+                  std::span<glm::vec4> neighborFilters, std::uint32_t index)
+{
+    auto blocks = [&](glm::vec3 targetPosition) {
+        return glm::dot(sample.position - targetPosition, sample.normal) >= 0.0f;
+    };
+
+    bool blocksCurrentProbe = blocks(gpuProbes[index].position);
+
+    for (std::uint32_t neighSpecInd = gpuProbes[index].neighborSpecBufStart;
+         neighSpecInd < gpuProbes[index].neighborSpecBufStart + gpuProbes[index].neighborSpecCount;
+         neighSpecInd++) {
+        auto neighInd = neighborIndices[neighSpecInd];
+        auto blocksNeighProbe = blocks(gpuProbes[neighInd].position);
+
+        if (blocksCurrentProbe != blocksNeighProbe) {
+            // block neigh from current
+            neighborFilters[neighSpecInd] = glm::vec4(0.0f);
+
+            // block current from neigh
+            for (std::uint32_t neighSpecInd2 = gpuProbes[neighInd].neighborSpecBufStart;
+                 neighSpecInd2 <
+                 gpuProbes[neighInd].neighborSpecBufStart + gpuProbes[neighInd].neighborSpecCount;
+                 neighSpecInd2++) {
+                if (neighborIndices[neighSpecInd2] == index) {
+                    neighborFilters[neighSpecInd2] = glm::vec4(0.0f);
+                }
+            }
+        }
+    }
+}
+
+void filterWSample(const Sample &sample, std::span<const H_ProbeDefinition> hostProbes,
+                   std::span<const G_ProbeDefinition> gpuProbes,
+                   std::span<const std::uint32_t> gpuNeighborIndices,
+                   std::span<glm::vec4> neighborFilters, std::uint32_t index)
+{
+    if (hostProbes[index].recursion.childIndex[0][0][0] == 0) {
+        blockWSample(sample, gpuProbes, gpuNeighborIndices, neighborFilters, index);
+    } else {
+        bool x = sample.position.x > hostProbes[index].recursion.pivot.x;
+        bool y = sample.position.y > hostProbes[index].recursion.pivot.y;
+        bool z = sample.position.z > hostProbes[index].recursion.pivot.z;
+        if (hostProbes[index].recursion.childIndex[x][y][z] == 0) {
+            std::cout << "Error: No child index @filterWSample" << std::endl;
+        } else {
+            filterWSample(sample, hostProbes, gpuProbes, gpuNeighborIndices, neighborFilters,
+                          hostProbes[index].recursion.childIndex[x][y][z]);
+        }
+    }
+}
+
 void generateTransfers(std::span<const Sample> samples,
-                       std::span<const H_ProbeDefinition> hostProbes, ProbeBufferPtr gpuProbes,
-                       NeighborFilterBufferPtr gpuNeighborFilters)
+                       std::span<const H_ProbeDefinition> hostProbes,
+                       std::span<const G_ProbeDefinition> probes,
+                       std::span<const std::uint32_t> neighborIndices,
+                       std::span<glm::vec4> neighborFilters)
 {
     MMETER_SCOPE_PROFILER("Transfer gen");
 
-    auto neighborFilters = gpuNeighborFilters.getMutableElements();
-
     for (std::size_t i = 0; i < hostProbes.size(); i++) {
         auto &hostProbe = hostProbes[i];
-        auto &gpuProbe = gpuProbes.getElement(i);
+        auto &gpuProbe = probes[i];
 
         for (std::size_t j = 0; j < gpuProbe.neighborSpecCount; j++) {
             neighborFilters[gpuProbe.neighborSpecBufStart + j] = glm::vec4(1.0f);
         }
+    }
+
+    // Put samples in new (and some old) probes
+    for (auto &sample : samples) {
+        filterWSample(sample, hostProbes, probes, neighborIndices, neighborFilters, 0);
     }
 }
 
