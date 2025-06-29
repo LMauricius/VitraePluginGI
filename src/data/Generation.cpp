@@ -83,6 +83,69 @@ const char *const GLSL_PROBE_GEN_SNIPPET = R"glsl(
         return probeWallSurfaces(probeindex)[AXES[dirIndex]];
     }
 
+    struct ProbeWall {
+        vec3 points[4];
+    };
+
+    ProbeWall probeWall(vec3 center, vec3 size, uint dirInd)
+    {
+        ProbeWall wall;
+        vec3 wallCenter = center + DIRECTIONS[dirInd] * size / 2.0;
+        vec3 off1 = DIRECTIONS[(dirInd + 2) % 6] * size / 2.0;
+        vec3 off2 = DIRECTIONS[(dirInd + 4) % 6] * size / 2.0;
+
+        wall.points[0] = wallCenter + off1 + off2;
+        wall.points[1] = wallCenter - off1 + off2;
+        wall.points[2] = wallCenter - off1 - off2;
+        wall.points[3] = wallCenter + off1 - off2;
+
+        return wall;
+    }
+
+    vec2 projectedPoint(vec3 point, vec3 frontDir, vec3 rightDir, vec3 upDir) {
+        float l = length(point);
+        vec3 normPoint = point / l;
+        return vec2(dot(normPoint, rightDir), dot(normPoint, upDir));
+    }
+
+    struct ProbeProjectedWall {
+        vec2 points[4];
+    };
+
+    ProbeProjectedWall probeProjectedWall(
+        vec3 center, vec3 size, uint dirInd,
+        vec3 frontDir, vec3 rightDir, vec3 upDir
+    ) {
+        ProbeWall wall = probeWall(center, size, dirInd);
+        ProbeProjectedWall projectedWall;
+        for (int i = 0; i < 4; i++) {
+            projectedWall.points[i] = projectedPoint(wall.points[i], frontDir, rightDir, upDir);
+        }
+        return projectedWall;
+    }
+
+    vec2 projectedSize(
+        vec3 center, vec3 size, uint dirInd,
+        vec3 frontDir, vec3 rightDir, vec3 upDir
+    ) {
+        ProbeProjectedWall projectedWall = probeProjectedWall(
+            center, size, dirInd,
+            frontDir, rightDir, upDir
+        );
+        vec2 minPos = vec2(1000.0);
+        vec2 maxPos = vec2(-1000.0);
+        for (int i = 0; i < 4; i++) {
+            minPos = min(minPos, projectedWall.points[i]);
+            maxPos = max(maxPos, projectedWall.points[i]);
+        }
+        return maxPos - minPos;
+    }
+
+    float triangleArea(vec2 a, vec2 b, vec2 c) {
+        // Shoelace Formula
+        return 0.5 * abs(a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y));
+    }
+
     float arcLength(float len, float distance) {
         return len / (distance * distance); 
     }
@@ -97,43 +160,43 @@ const char *const GLSL_PROBE_GEN_SNIPPET = R"glsl(
         // Since the total leaving amounts get normalized,
         // the shared scalings (such as pi^2 constants) get nullified.
 
+        const float maxProjSinPerAxis = dot(normalize(vec3(1.0)), vec3(1.0, 0.0, 0.0));
+
+        vec3 frontDir = DIRECTIONS[srcDirIndex];
+        vec3 rightDir = DIRECTIONS[(srcDirIndex + 2) % 6];
+        vec3 upDir = DIRECTIONS[(srcDirIndex + 4) % 6];
+
+        // Project destination wall to src probe's normalized space
+
         vec3 srcCenter = gpuProbes[srcProbeindex].position;
-        vec3 boundaryCenter = (
-            gpuProbes[srcProbeindex].position +
-            DIRECTIONS[srcDirIndex] * gpuProbes[srcProbeindex].size / 2.0);
-        vec3 dstCenter = (
-            gpuProbes[dstProbeindex].position +
-            DIRECTIONS[dstDirIndex] * gpuProbes[dstProbeindex].size / 2.0);
-        
-        const float src2boundaryDist = 0.5;
+        vec3 dstCenter = gpuProbes[dstProbeindex].position;
 
-        vec3 src2dstOffset = (dstCenter - srcCenter) / gpuProbes[srcProbeindex].size;
-        float src2dstDist = length(src2dstOffset);
-        vec3 src2dstDir = src2dstOffset / src2dstDist;
+        ProbeProjectedWall projectedWall = probeProjectedWall(
+            dstCenter - srcCenter,
+            gpuProbes[dstProbeindex].size / gpuProbes[srcProbeindex].size,
+            dstDirIndex,
+            frontDir, rightDir, upDir
+        );
 
-        float dstDot = dot(src2dstDir, DIRECTIONS[dstDirIndex]);
-        float lightDot = dot(src2dstDir, DIRECTIONS[srcDirIndex]);
-
-        if (dstDot <= 0.0 || lightDot <= 0.0) {
-            return 0.0;
+        // Limit wall to light pyramid
+        // (Instead of polygonal cutting, just limit each coord to maxProjSinPerAxis angle)
+        for (int i = 0; i < 4; i++) {
+            if (projectedWall.points[i].x < -maxProjSinPerAxis)
+                projectedWall.points[i].x = -maxProjSinPerAxis;
+            else if (projectedWall.points[i].x > maxProjSinPerAxis)
+                projectedWall.points[i].x = maxProjSinPerAxis;
+            if (projectedWall.points[i].y < -maxProjSinPerAxis)
+                projectedWall.points[i].y = -maxProjSinPerAxis;
+            else if (projectedWall.points[i].y > maxProjSinPerAxis)
+                projectedWall.points[i].y = maxProjSinPerAxis;
         }
 
-        const float boundarySurface = 1.0;//probeWallSurface(srcProbeindex, srcDirIndex);
-        const float boundaryArcLength = arcLength(sqrt(boundarySurface), src2boundaryDist);
-
-        float dstArcOffset = arcOffset(DIRECTIONS[srcDirIndex], src2dstDir);
-
-        vec3 dstConvertedSize = gpuProbes[dstProbeindex].size / gpuProbes[srcProbeindex].size;
-        float dstSurface = (dstConvertedSize.yzx * dstConvertedSize.zxy)[AXES[dstDirIndex]];
-        float dstProjectedSurface = dstSurface / (src2dstDist * src2dstDist) * dstDot;
-        float dstArcLength = sqrt(dstProjectedSurface);
-
-        float dstArcStart = dstArcOffset - dstArcLength / 2.0;
-        float dstArcEnd = dstArcOffset + dstArcLength / 2.0;
-        float visibleAmount =
-            max(min(boundaryArcLength / 2.0, dstArcEnd) - dstArcStart, 0.0) / dstArcLength;
-
-        return visibleAmount * dstProjectedSurface;
+        // Calculate projected surface
+        return abs(triangleArea(
+            projectedWall.points[0], projectedWall.points[1], projectedWall.points[2]
+        )) + abs(triangleArea(
+            projectedWall.points[2], projectedWall.points[3], projectedWall.points[0]
+        ));
     }
 )glsl";
 
