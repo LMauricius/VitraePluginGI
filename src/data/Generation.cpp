@@ -26,8 +26,8 @@ constexpr float PI2 = 3.14159265 * 2.0;
 // 2*pi / light count over a round arc
 constexpr float LIGHT_ARC_COVERAGE = PI2 / 4;
 
-float factorTo(const H_ProbeDefinition &srcProbe, const H_ProbeDefinition &dstProbe,
-               int srcDirIndex, int dstDirIndex)
+float factorToProbe(const H_ProbeDefinition &srcProbe, const H_ProbeDefinition &dstProbe,
+                    int srcDirIndex, int dstDirIndex)
 {
     // note: we don't need the exact angular surface for the wall, or exact scales here.
     // Since the total leaving amounts get normalized,
@@ -76,11 +76,6 @@ const char *const GLSL_PROBE_GEN_SNIPPET = R"glsl(
         vec3 dim = gpuProbes[probeindex].size;
 
         return dim.yzx * dim.zxy;
-    }
-
-    float probeWallSurface(uint probeindex, uint dirIndex)
-    {
-        return probeWallSurfaces(probeindex)[AXES[dirIndex]];
     }
 
     struct ProbeWall {
@@ -146,35 +141,16 @@ const char *const GLSL_PROBE_GEN_SNIPPET = R"glsl(
         return 0.5 * abs(a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y));
     }
 
-    float arcLength(float len, float distance) {
-        return len / (distance * distance); 
-    }
-
-    float arcOffset(vec3 baseDir, vec3 targetDir) {
-        return abs(acos(dot(baseDir, targetDir)));
-    }
-
-    float factorTo(uint srcProbeindex, uint dstProbeindex, uint srcDirIndex, uint dstDirIndex)
-    {
+    float factorTo(
+        vec3 frontDir, vec3 rightDir, vec3 upDir, float maxProjSinPerAxis,
+        vec3 dstCenter, vec3 dstSize, uint dstDirIndex
+    ) {
         // note: we don't need the exact angular surface for the dst, or exact scales here.
         // Since the total leaving amounts get normalized,
         // the shared scalings (such as pi^2 constants) get nullified.
 
-        const float maxProjSinPerAxis = dot(normalize(vec3(1.0)), vec3(1.0, 0.0, 0.0));
-
-        vec3 frontDir = DIRECTIONS[srcDirIndex];
-        vec3 rightDir = DIRECTIONS[(srcDirIndex + 2) % 6];
-        vec3 upDir = DIRECTIONS[(srcDirIndex + 4) % 6];
-
-        // Project destination wall to src probe's normalized space
-
-        vec3 srcCenter = gpuProbes[srcProbeindex].position;
-        vec3 dstCenter = gpuProbes[dstProbeindex].position;
-
         ProbeProjectedWall projectedWall = probeProjectedWall(
-            dstCenter - srcCenter,
-            gpuProbes[dstProbeindex].size / gpuProbes[srcProbeindex].size,
-            dstDirIndex,
+            dstCenter, dstSize, dstDirIndex,
             frontDir, rightDir, upDir
         );
 
@@ -197,6 +173,31 @@ const char *const GLSL_PROBE_GEN_SNIPPET = R"glsl(
         )) + abs(triangleArea(
             projectedWall.points[2], projectedWall.points[3], projectedWall.points[0]
         ));
+    }
+
+    float factorToProbe(uint srcProbeindex, uint dstProbeindex, uint srcDirIndex, uint dstDirIndex)
+    {
+        // note: we don't need the exact angular surface for the dst, or exact scales here.
+        // Since the total leaving amounts get normalized,
+        // the shared scalings (such as pi^2 constants) get nullified.
+
+        const float maxProjSinPerAxis = dot(normalize(vec3(1.0)), vec3(1.0, 0.0, 0.0));
+
+        vec3 frontDir = DIRECTIONS[srcDirIndex];
+        vec3 rightDir = DIRECTIONS[(srcDirIndex + 2) % 6];
+        vec3 upDir = DIRECTIONS[(srcDirIndex + 4) % 6];
+
+        // Project destination wall to src probe's normalized space
+
+        vec3 srcCenter = gpuProbes[srcProbeindex].position;
+        vec3 dstCenter = gpuProbes[dstProbeindex].position;
+
+        return factorTo(
+            frontDir, rightDir, upDir, maxProjSinPerAxis,
+            dstCenter - srcCenter,
+            gpuProbes[dstProbeindex].size / gpuProbes[srcProbeindex].size,
+            dstDirIndex
+        );
     }
 )glsl";
 

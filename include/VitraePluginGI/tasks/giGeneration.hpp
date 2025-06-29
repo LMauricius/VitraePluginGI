@@ -99,16 +99,16 @@ inline void setupGIGeneration(ComponentRoot &root)
                         
                         new_gpuNeighborTransfers[i].
                             source[neighDirInd].face[myDirInd] =
-                            factorTo(neighInd, probeIndex, neighDirInd, myDirInd);
+                            factorToProbe(neighInd, probeIndex, neighDirInd, myDirInd);
                         totalLeaving +=
-                            factorTo(probeIndex, neighInd, myDirInd, neighDirInd);
+                            factorToProbe(probeIndex, neighInd, myDirInd, neighDirInd);
                     }
                 }
 
                 // Ensure the leaving factor is at least the amount that would hit this probe's wall
                 totalLeaving = max(
                     totalLeaving,
-                    factorTo(probeIndex, probeIndex, myDirInd, myDirInd)
+                    factorToProbe(probeIndex, probeIndex, myDirInd, myDirInd)
                 );
 
                 if (totalLeaving > 0.05) {
