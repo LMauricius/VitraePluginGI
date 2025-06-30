@@ -752,7 +752,7 @@ void blockWSample(const Sample &sample, std::span<const G_ProbeDefinition> gpuPr
         auto neighInd = neighborIndices[neighSpecInd];
         auto blocksNeighProbe = blocks(gpuProbes[neighInd].position);
 
-        if (blocksCurrentProbe != blocksNeighProbe) {
+        if (blocksNeighProbe) {
             // block neigh from current
             neighborFilters[neighSpecInd] = glm::vec4(0.0f);
 
