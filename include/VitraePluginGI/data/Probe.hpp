@@ -24,12 +24,12 @@ Cpu and Gpu structs
 
 struct Reflection
 {
-    glm::vec4 face[6]; // ind = to which face
+    glm::vec4 face[6][6]; // ind = to which face
 };
 template <>
 inline const CompoundTypeMeta TYPE_META<Reflection> = {
     GLSLStructMeta{R"glsl(
-        vec4 face[6];
+        vec4 face[6][6];
     )glsl"},
     STD140LayoutMeta{.std140Size = sizeof(Reflection), .std140Alignment = 16},
 };
@@ -66,7 +66,6 @@ struct H_ProbeDefinition
 {
     glm::vec3 position;
     glm::vec3 size;
-    Reflection reflection;
     FaceTransfer leavingPremulFactor;
     std::vector<std::uint32_t> neighborIndices;
 
@@ -184,6 +183,7 @@ Conversion
 void convertHost2GpuBuffers(std::span<const H_ProbeDefinition> hostProbes, ProbeBufferPtr gpuProbes,
                             ProbeRecursionBufferPtr gpuRecursions,
                             ReflectionBufferPtr gpuReflectionTransfers,
+                            ReflectionBufferPtr gpuDenormReflectionTransfers,
                             LeavingPremulFactorBufferPtr gpuLeavingPremulFactors,
                             NeighborIndexBufferPtr gpuNeighborIndices,
                             NeighborIndexBufferPtr gpuNeighborOwnerIndices,

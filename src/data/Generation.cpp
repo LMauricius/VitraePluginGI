@@ -21,48 +21,97 @@ namespace VitraePluginGI
 namespace
 {
 
-constexpr float PI2 = 3.14159265 * 2.0;
-
-// 2*pi / light count over a round arc
-constexpr float LIGHT_ARC_COVERAGE = PI2 / 4;
-
-float factorToProbe(const H_ProbeDefinition &srcProbe, const H_ProbeDefinition &dstProbe,
-                    int srcDirIndex, int dstDirIndex)
+struct ProbeWall
 {
-    // note: we don't need the exact angular surface for the wall, or exact scales here.
+    glm::vec3 points[4];
+};
+
+ProbeWall probeWall(glm::vec3 center, glm::vec3 size, uint dirInd)
+{
+    ProbeWall wall;
+    glm::vec3 wallCenter = center + DIRECTIONS[dirInd] * size / 2.0f;
+    glm::vec3 off1 = DIRECTIONS[(dirInd + 2) % 6] * size / 2.0f;
+    glm::vec3 off2 = DIRECTIONS[(dirInd + 4) % 6] * size / 2.0f;
+
+    wall.points[0] = wallCenter + off1 + off2;
+    wall.points[1] = wallCenter - off1 + off2;
+    wall.points[2] = wallCenter - off1 - off2;
+    wall.points[3] = wallCenter + off1 - off2;
+
+    return wall;
+}
+
+glm::vec2 projectedPoint(glm::vec3 point, glm::vec3 frontDir, glm::vec3 rightDir, glm::vec3 upDir)
+{
+    float l = length(point);
+    glm::vec3 normPoint = point / l;
+    return glm::vec2(dot(normPoint, rightDir), dot(normPoint, upDir));
+}
+
+struct ProbeProjectedWall
+{
+    glm::vec2 points[4];
+};
+
+ProbeProjectedWall probeProjectedWall(glm::vec3 center, glm::vec3 size, uint dirInd,
+                                      glm::vec3 frontDir, glm::vec3 rightDir, glm::vec3 upDir)
+{
+    ProbeWall wall = probeWall(center, size, dirInd);
+    ProbeProjectedWall projectedWall;
+    for (int i = 0; i < 4; i++) {
+        projectedWall.points[i] = projectedPoint(wall.points[i], frontDir, rightDir, upDir);
+    }
+    return projectedWall;
+}
+
+glm::vec2 projectedSize(glm::vec3 center, glm::vec3 size, uint dirInd, glm::vec3 frontDir,
+                        glm::vec3 rightDir, glm::vec3 upDir)
+{
+    ProbeProjectedWall projectedWall =
+        probeProjectedWall(center, size, dirInd, frontDir, rightDir, upDir);
+    glm::vec2 minPos = glm::vec2(1000.0);
+    glm::vec2 maxPos = glm::vec2(-1000.0);
+    for (int i = 0; i < 4; i++) {
+        minPos = min(minPos, projectedWall.points[i]);
+        maxPos = max(maxPos, projectedWall.points[i]);
+    }
+    return maxPos - minPos;
+}
+
+float triangleArea(glm::vec2 a, glm::vec2 b, glm::vec2 c)
+{
+    // Shoelace Formula
+    return 0.5 * abs(a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y));
+}
+
+float factorTo(glm::vec3 frontDir, glm::vec3 rightDir, glm::vec3 upDir, float maxProjSinPerAxis,
+               glm::vec3 dstCenter, glm::vec3 dstSize, uint dstDirIndex)
+{
+    // note: we don't need the exact angular surface for the dst, or exact scales here.
     // Since the total leaving amounts get normalized,
     // the shared scalings (such as pi^2 constants) get nullified.
 
-    const glm::vec3 &srcCenter = srcProbe.position;
-    glm::vec3 wallCenter = dstProbe.position + DIRECTIONS[dstDirIndex] * dstProbe.size / 2.0f;
-    float wallSize = 1.0;
-    {
-        glm::vec3 wallDiag = (glm::vec3(1.0) - glm::abs(DIRECTIONS[dstDirIndex])) * dstProbe.size;
-        glm::vec3 wallDiagNon0 = wallDiag + glm::abs(DIRECTIONS[dstDirIndex]);
-        wallSize = wallDiagNon0.x * wallDiagNon0.y * wallDiagNon0.z;
+    ProbeProjectedWall projectedWall =
+        probeProjectedWall(dstCenter, dstSize, dstDirIndex, frontDir, rightDir, upDir);
+
+    // Limit wall to light pyramid
+    // (Instead of polygonal cutting, just limit each coord to maxProjSinPerAxis angle)
+    for (int i = 0; i < 4; i++) {
+        if (projectedWall.points[i].x < -maxProjSinPerAxis)
+            projectedWall.points[i].x = -maxProjSinPerAxis;
+        else if (projectedWall.points[i].x > maxProjSinPerAxis)
+            projectedWall.points[i].x = maxProjSinPerAxis;
+        if (projectedWall.points[i].y < -maxProjSinPerAxis)
+            projectedWall.points[i].y = -maxProjSinPerAxis;
+        else if (projectedWall.points[i].y > maxProjSinPerAxis)
+            projectedWall.points[i].y = maxProjSinPerAxis;
     }
 
-    glm::vec3 src2wallOffset = wallCenter - srcCenter;
-    float src2wallDist = glm::length(src2wallOffset);
-    glm::vec3 src2wallDir = src2wallOffset / src2wallDist;
-
-    float wallDot = glm::dot(src2wallDir, DIRECTIONS[dstDirIndex]);
-    float lightDot = glm::dot(src2wallDir, DIRECTIONS[srcDirIndex]);
-    float wallAngularSurface = wallSize / (src2wallDist * src2wallDist) * wallDot;
-
-    if (wallAngularSurface <= 0.0f) {
-        return 0.0f;
-    }
-
-    float wallArcCoverage = std::sqrt(wallSize) / (PI2 * src2wallDist) * wallDot;
-    float wallArcOffset = std::abs(std::acos(lightDot));
-
-    float wallArcStart = wallArcOffset - wallArcCoverage / 2.0f;
-    float wallArcEnd = wallArcOffset + wallArcCoverage / 2.0f;
-    float visibleAmount =
-        std::max(std::min(LIGHT_ARC_COVERAGE / 2.0f, wallArcEnd), 0.0f) / wallArcCoverage;
-
-    return visibleAmount * wallAngularSurface;
+    // Calculate projected surface
+    return abs(triangleArea(projectedWall.points[0], projectedWall.points[1],
+                            projectedWall.points[2])) +
+           abs(triangleArea(projectedWall.points[2], projectedWall.points[3],
+                            projectedWall.points[0]));
 }
 
 } // namespace
@@ -720,10 +769,36 @@ void blockWSample(const Sample &sample, std::span<const G_ProbeDefinition> gpuPr
     }
 }
 
+void reflectWSample(const Sample &sample, std::span<const G_ProbeDefinition> gpuProbes,
+                    std::span<Reflection> denormReflectionTransfers, std::uint32_t index)
+{
+    float recvFactors[6];
+
+    for (int i = 0; i < 6; i++) {
+        recvFactors[i] = std::max(0.0f, glm::dot(sample.normal, DIRECTIONS[i]));
+    }
+
+    for (int i = 0; i < 6; i++) {
+        glm::vec3 frontDir = sample.normal;
+        glm::vec3 rightDir = glm::cross(frontDir, glm::vec3(0.0f, 1.0f, 0.0f));
+        glm::vec3 upDir = glm::cross(frontDir, rightDir);
+
+        float sendFactor = factorTo(frontDir, rightDir, upDir, 1.0f, gpuProbes[index].position,
+                                    gpuProbes[index].size, i);
+
+        for (int j = 0; j < 6; j++) {
+            float reflFactor = sendFactor * recvFactors[j];
+            denormReflectionTransfers[index].face[i][j] =
+                glm::vec4(glm::vec3(sample.color) * reflFactor, reflFactor);
+        }
+    }
+}
+
 void filterWSample(const Sample &sample, std::span<const H_ProbeDefinition> hostProbes,
                    std::span<const G_ProbeDefinition> gpuProbes,
                    std::span<const std::uint32_t> gpuNeighborIndices,
-                   std::span<glm::vec4> neighborFilters, std::uint32_t index)
+                   std::span<glm::vec4> neighborFilters,
+                   std::span<Reflection> denormReflectionTransfers, std::uint32_t index)
 {
     if (hostProbes[index].recursion.childIndex[0][0][0] == 0) {
         blockWSample(sample, gpuProbes, gpuNeighborIndices, neighborFilters, index);
@@ -735,6 +810,7 @@ void filterWSample(const Sample &sample, std::span<const H_ProbeDefinition> host
             std::cout << "Error: No child index @filterWSample" << std::endl;
         } else {
             filterWSample(sample, hostProbes, gpuProbes, gpuNeighborIndices, neighborFilters,
+                          denormReflectionTransfers,
                           hostProbes[index].recursion.childIndex[x][y][z]);
         }
     }
@@ -744,7 +820,8 @@ void generateTransfers(std::span<const Sample> samples,
                        std::span<const H_ProbeDefinition> hostProbes,
                        std::span<const G_ProbeDefinition> probes,
                        std::span<const std::uint32_t> neighborIndices,
-                       std::span<glm::vec4> neighborFilters)
+                       std::span<glm::vec4> neighborFilters,
+                       std::span<Reflection> denormReflectionTransfers)
 {
     MMETER_SCOPE_PROFILER("Transfer gen");
 
@@ -757,9 +834,66 @@ void generateTransfers(std::span<const Sample> samples,
         }
     }
 
+    // init reflection transfers
+    for (auto &reflection : denormReflectionTransfers) {
+        reflection = Reflection{
+            .face{
+                {
+                    glm::vec4(0.0f),
+                    glm::vec4(0.0f),
+                    glm::vec4(0.0f),
+                    glm::vec4(0.0f),
+                    glm::vec4(0.0f),
+                    glm::vec4(0.0f),
+                },
+                {
+                    glm::vec4(0.0f),
+                    glm::vec4(0.0f),
+                    glm::vec4(0.0f),
+                    glm::vec4(0.0f),
+                    glm::vec4(0.0f),
+                    glm::vec4(0.0f),
+                },
+                {
+                    glm::vec4(0.0f),
+                    glm::vec4(0.0f),
+                    glm::vec4(0.0f),
+                    glm::vec4(0.0f),
+                    glm::vec4(0.0f),
+                    glm::vec4(0.0f),
+                },
+                {
+                    glm::vec4(0.0f),
+                    glm::vec4(0.0f),
+                    glm::vec4(0.0f),
+                    glm::vec4(0.0f),
+                    glm::vec4(0.0f),
+                    glm::vec4(0.0f),
+                },
+                {
+                    glm::vec4(0.0f),
+                    glm::vec4(0.0f),
+                    glm::vec4(0.0f),
+                    glm::vec4(0.0f),
+                    glm::vec4(0.0f),
+                    glm::vec4(0.0f),
+                },
+                {
+                    glm::vec4(0.0f),
+                    glm::vec4(0.0f),
+                    glm::vec4(0.0f),
+                    glm::vec4(0.0f),
+                    glm::vec4(0.0f),
+                    glm::vec4(0.0f),
+                },
+            },
+        };
+    }
+
     // Put samples in new (and some old) probes
     for (auto &sample : samples) {
-        filterWSample(sample, hostProbes, probes, neighborIndices, neighborFilters, 0);
+        filterWSample(sample, hostProbes, probes, neighborIndices, neighborFilters,
+                      denormReflectionTransfers, 0);
     }
 }
 

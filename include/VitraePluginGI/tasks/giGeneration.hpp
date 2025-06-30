@@ -69,6 +69,7 @@ inline void setupGIGeneration(ComponentRoot &root)
                 {
                     {"new_gpuProbes", TYPE_INFO<ProbeBufferPtr>},
                     {"new_gpuNeighborIndices", TYPE_INFO<NeighborIndexBufferPtr>},
+                    {"new_gpuDenormReflectionTransfers", TYPE_INFO<ReflectionBufferPtr>},
 
                     {"gi_utilities", TYPE_INFO<void>},
                     {"gi_probegen", TYPE_INFO<void>},
@@ -118,9 +119,9 @@ inline void setupGIGeneration(ComponentRoot &root)
                 }
 
                 // reflection
-                new_gpuReflectionTransfers[probeIndex].face[myDirInd] = vec4(
-                    0.0, 0.0, 0.0, 0.0
-                );
+                //new_gpuReflectionTransfers[probeIndex].face[myDirInd] = vec4(
+                //    0.0, 0.0, 0.0, 0.0
+                //);
             )glsl",
         }}),
         ShaderStageFlag::Compute);
@@ -168,6 +169,7 @@ inline void setupGIGeneration(ComponentRoot &root)
                     {"new_gpuProbeRecursions", TYPE_INFO<ProbeRecursionBufferPtr>},
                     {"new_gpuProbeStates", TYPE_INFO<ProbeStateBufferPtr>},
                     {"new_gpuReflectionTransfers", TYPE_INFO<ReflectionBufferPtr>},
+                    {"new_gpuDenormReflectionTransfers", TYPE_INFO<ReflectionBufferPtr>},
                     {"new_gpuLeavingPremulFactors", TYPE_INFO<LeavingPremulFactorBufferPtr>},
                     {"new_gpuNeighborIndices", TYPE_INFO<NeighborIndexBufferPtr>},
                     {"new_gpuNeighborOwnerIndices", TYPE_INFO<NeighborIndexBufferPtr>},
@@ -229,6 +231,9 @@ inline void setupGIGeneration(ComponentRoot &root)
                     ReflectionBufferPtr gpuReflectionTransfers = makeBuffer<void, Reflection>(
                         root, (BufferUsageHint::HOST_INIT | BufferUsageHint::GPU_DRAW),
                         "gpuReflectionTransfers");
+                    ReflectionBufferPtr gpuDenormReflectionTransfers = makeBuffer<void, Reflection>(
+                        root, (BufferUsageHint::HOST_INIT | BufferUsageHint::GPU_DRAW),
+                        "gpuDenormReflectionTransfers");
                     LeavingPremulFactorBufferPtr gpuLeavingPremulFactors =
                         makeBuffer<void, FaceTransfer>(
                             root, (BufferUsageHint::HOST_INIT | BufferUsageHint::GPU_DRAW),
@@ -256,13 +261,14 @@ inline void setupGIGeneration(ComponentRoot &root)
                     generateProbeList(std::span<const Sample>(samples), sceneAABB.getCenter(),
                                       sceneAABB.getExtent(), minProbeSize, maxProbeBias, maxGIDepth,
                                       useDenormalizedCells, useQuadTree, probes, worldStart);
-                    convertHost2GpuBuffers(probes, gpuProbes, gpuProbeRecursions,
-                                           gpuReflectionTransfers, gpuLeavingPremulFactors,
-                                           gpuNeighborIndices, gpuNeighborOwnerIndices,
-                                           gpuNeighborTransfers, gpuNeighborFilters);
+                    convertHost2GpuBuffers(
+                        probes, gpuProbes, gpuProbeRecursions, gpuReflectionTransfers,
+                        gpuDenormReflectionTransfers, gpuLeavingPremulFactors, gpuNeighborIndices,
+                        gpuNeighborOwnerIndices, gpuNeighborTransfers, gpuNeighborFilters);
                     generateTransfers(std::span<const Sample>(samples), probes,
                                       gpuProbes.getElements(), gpuNeighborIndices.getElements(),
-                                      gpuNeighborFilters.getMutableElements());
+                                      gpuNeighborFilters.getMutableElements(),
+                                      gpuDenormReflectionTransfers.getMutableElements());
 
                     gpuProbeStates.resizeElements(probes.size());
                     for (std::size_t i = 0; i < probes.size(); ++i) {
@@ -275,6 +281,7 @@ inline void setupGIGeneration(ComponentRoot &root)
                     gpuProbeRecursions.getRawBuffer()->synchronize();
                     gpuProbeStates.getRawBuffer()->synchronize();
                     gpuReflectionTransfers.getRawBuffer()->synchronize();
+                    gpuDenormReflectionTransfers.getRawBuffer()->synchronize();
                     gpuLeavingPremulFactors.getRawBuffer()->synchronize();
                     gpuNeighborIndices.getRawBuffer()->synchronize();
                     gpuNeighborOwnerIndices.getRawBuffer()->synchronize();
@@ -287,6 +294,8 @@ inline void setupGIGeneration(ComponentRoot &root)
                     context.properties.set("new_gpuProbeRecursions", gpuProbeRecursions);
                     context.properties.set("new_gpuProbeStates", gpuProbeStates);
                     context.properties.set("new_gpuReflectionTransfers", gpuReflectionTransfers);
+                    context.properties.set("new_gpuDenormReflectionTransfers",
+                                           gpuDenormReflectionTransfers);
                     context.properties.set("new_gpuLeavingPremulFactors", gpuLeavingPremulFactors);
                     context.properties.set("new_gpuNeighborIndices", gpuNeighborIndices);
                     context.properties.set("new_gpuNeighborOwnerIndices", gpuNeighborOwnerIndices);
@@ -348,6 +357,7 @@ inline void setupGIGeneration(ComponentRoot &root)
                     {"gpuProbeRecursions", "new_gpuProbeRecursions"},
                     {"gpuProbeStates", "new_gpuProbeStates"},
                     {"gpuReflectionTransfers", "new_gpuReflectionTransfers"},
+                    {"gpuDenormReflectionTransfers", "new_gpuDenormReflectionTransfers"},
                     {"gpuLeavingPremulFactors", "new_gpuLeavingPremulFactors"},
                     {"gpuNeighborIndices", "new_gpuNeighborIndices"},
                     {"gpuNeighborOwnerIndices", "new_gpuNeighborOwnerIndices"},
@@ -366,6 +376,7 @@ inline void setupGIGeneration(ComponentRoot &root)
                     {"gpuProbeRecursions", TYPE_INFO<ProbeRecursionBufferPtr>},
                     {"gpuProbeStates", TYPE_INFO<ProbeStateBufferPtr>},
                     {"gpuReflectionTransfers", TYPE_INFO<ReflectionBufferPtr>},
+                    {"gpuDenormReflectionTransfers", TYPE_INFO<ReflectionBufferPtr>},
                     {"gpuLeavingPremulFactors", TYPE_INFO<LeavingPremulFactorBufferPtr>},
                     {"gpuNeighborIndices", TYPE_INFO<NeighborIndexBufferPtr>},
                     {"gpuNeighborOwnerIndices", TYPE_INFO<NeighborIndexBufferPtr>},

@@ -5,6 +5,7 @@
 void Vitrae::convertHost2GpuBuffers(std::span<const H_ProbeDefinition> hostProbes,
                                     ProbeBufferPtr gpuProbes, ProbeRecursionBufferPtr gpuRecursions,
                                     ReflectionBufferPtr gpuReflectionTransfers,
+                                    ReflectionBufferPtr gpuDenormReflectionTransfers,
                                     LeavingPremulFactorBufferPtr gpuLeavingPremulFactors,
                                     NeighborIndexBufferPtr gpuNeighborIndices,
                                     NeighborIndexBufferPtr gpuNeighborOwnerIndices,
@@ -16,6 +17,7 @@ void Vitrae::convertHost2GpuBuffers(std::span<const H_ProbeDefinition> hostProbe
     gpuProbes.resizeElements(hostProbes.size());
     gpuRecursions.resizeElements(hostProbes.size());
     gpuReflectionTransfers.resizeElements(hostProbes.size());
+    gpuDenormReflectionTransfers.resizeElements(hostProbes.size());
     gpuLeavingPremulFactors.resizeElements(hostProbes.size());
 
     std::size_t numNeighborSpecs = 0;
@@ -25,6 +27,7 @@ void Vitrae::convertHost2GpuBuffers(std::span<const H_ProbeDefinition> hostProbe
         auto &gpuProbe = gpuProbes.getMutableElement(i);
         auto &gpuRecursion = gpuRecursions.getMutableElement(i);
         auto &gpuReflectionTransfer = gpuReflectionTransfers.getMutableElement(i);
+        auto &gpuDenormReflectionTransfer = gpuDenormReflectionTransfers.getMutableElement(i);
         auto &gpuLeavingPremulFactor = gpuLeavingPremulFactors.getMutableElement(i);
 
         gpuProbe.position = hostProbe.position;
@@ -45,7 +48,6 @@ void Vitrae::convertHost2GpuBuffers(std::span<const H_ProbeDefinition> hostProbe
         }
 
         for (std::size_t d = 0; d < 6; d++) {
-            gpuReflectionTransfer.face[d] = hostProbe.reflection.face[d];
             gpuLeavingPremulFactor.face[d] = hostProbe.leavingPremulFactor.face[d];
         }
 
