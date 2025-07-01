@@ -44,6 +44,30 @@ inline void setupGIUpdate(ComponentRoot &root)
         root.getComponent<ShaderSnippetKeeper>().new_asset({ShaderSnippet::StringParams{
             .inputSpecs =
                 {
+                    {"swapped_probes", TYPE_INFO<void>},
+                },
+            .outputSpecs =
+                {
+                    {"renewed_probes", TYPE_INFO<void>},
+                },
+            .filterSpecs =
+                {
+                    {"gpuProbeStates", TYPE_INFO<ProbeStateBufferPtr>},
+                },
+            .snippet = R"glsl(
+                uint probeIndex = gl_GlobalInvocationID.x;
+                uint faceIndex = gl_GlobalInvocationID.y;
+
+                gpuProbeStates[probeIndex].illumination[faceIndex] = vec4(0.0);
+            )glsl",
+        }}),
+        ShaderStageFlag::Compute);
+
+    methodCollection.registerShaderTask(
+        root.getComponent<ShaderSnippetKeeper>().new_asset({ShaderSnippet::StringParams{
+            .inputSpecs =
+                {
+                    {"generated_probe_transfers", TYPE_INFO<void>},
                     {"gpuProbeStates_prev", TYPE_INFO<ProbeStateBufferPtr>},
                     {"gpuProbes", TYPE_INFO<ProbeBufferPtr>},
                     {"gpuProbeRecursions", TYPE_INFO<ProbeRecursionBufferPtr>},
@@ -57,7 +81,7 @@ inline void setupGIUpdate(ComponentRoot &root)
                     {"camera_light_strength", TYPE_INFO<float>, 50.0f},
 
                     {"gi_utilities", TYPE_INFO<void>},
-                    {"swapped_probes", TYPE_INFO<void>},
+                    {"renewed_probes", TYPE_INFO<void>},
                 },
             .outputSpecs =
                 {
