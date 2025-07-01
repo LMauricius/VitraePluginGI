@@ -83,6 +83,8 @@ inline void setupGIUpdate(ComponentRoot &root)
 
                     {"gi_utilities", TYPE_INFO<void>},
                     {"renewed_probes", TYPE_INFO<void>},
+
+                    {"dbg_giPropagationBoost", TYPE_INFO<float>, 1.0f},
                 },
             .outputSpecs =
                 {
@@ -113,12 +115,12 @@ inline void setupGIUpdate(ComponentRoot &root)
                                     gpuNeighborFilters[i] *
                                     gpuNeighborTransfers[i].source[neighDirInd].face[faceIndex] *
                                     gpuLeavingPremulFactors[neighInd].face[neighDirInd]
-                                );
+                                ) * dbg_giPropagationBoost;
                                 gpuProbeStates[probeIndex].ghostIllumination[faceIndex] += (
                                     gpuProbeStates_prev[neighInd].illumination[neighDirInd] *
                                     gpuNeighborTransfers[i].source[neighDirInd].face[faceIndex] *
                                     gpuLeavingPremulFactors[neighInd].face[neighDirInd]
-                                );
+                                ) * dbg_giPropagationBoost;
                             }
                         }
                     }
@@ -138,6 +140,8 @@ inline void setupGIUpdate(ComponentRoot &root)
                 {"gi_utilities", TYPE_INFO<void>},
                 {"renewed_probes", TYPE_INFO<void>},
                 {"generated_probe_reflections", TYPE_INFO<void>},
+
+                {"dbg_giReflectionBoost", TYPE_INFO<float>, 1.0f},
             },
             .outputSpecs{
                 {"reflected_probe", TYPE_INFO<void>},
@@ -155,11 +159,11 @@ inline void setupGIUpdate(ComponentRoot &root)
                             gpuProbeStates[probeIndex].illumination[faceIndex] += (
                                 gpuProbeStates_prev[probeIndex].illumination[reflFaceIndex] *
                                 gpuReflectionTransfers[probeIndex].face[faceIndex][reflFaceIndex]
-                            );
+                            ) * dbg_giReflectionBoost;
                             gpuProbeStates[probeIndex].ghostIllumination[faceIndex] += (
                                 gpuProbeStates_prev[probeIndex].illumination[reflFaceIndex] *
                                 gpuReflectionTransfers[probeIndex].face[faceIndex][reflFaceIndex]
-                            );
+                            ) * dbg_giReflectionBoost;
                         }
                     }
                 }
