@@ -94,30 +94,32 @@ inline void setupGIUpdate(ComponentRoot &root)
                 },
             .snippet = R"glsl(
                 uint probeIndex = gl_GlobalInvocationID.x;
-                uint faceIndex = gl_GlobalInvocationID.y;
 
                 // Skip non-leaf probes since they won't be sampled
                 if (gpuProbeRecursions[probeIndex].childIndex[0] == 0) {
-                    vec3 probeSize = gpuProbes[probeIndex].size;
-                    vec3 probePos = gpuProbes[probeIndex].position;
-                    uint neighborStartInd = gpuProbes[probeIndex].neighborSpecBufStart;
-                    uint neighborCount = gpuProbes[probeIndex].neighborSpecCount;
 
-                    // propagation
-                    for (uint i = neighborStartInd; i < neighborStartInd + neighborCount; i++) {
-                        uint neighInd = gpuNeighborIndices[i];
-                        for (uint neighDirInd = 0; neighDirInd < 6; neighDirInd++) {
-                            gpuProbeStates[probeIndex].illumination[faceIndex] += (
-                                gpuProbeStates_prev[neighInd].illumination[neighDirInd] *
-                                gpuNeighborFilters[i] *
-                                gpuNeighborTransfers[i].source[neighDirInd].face[faceIndex] *
-                                gpuLeavingPremulFactors[neighInd].face[neighDirInd]
-                            );
-                            gpuProbeStates[probeIndex].ghostIllumination[faceIndex] += (
-                                gpuProbeStates_prev[neighInd].illumination[neighDirInd] *
-                                gpuNeighborTransfers[i].source[neighDirInd].face[faceIndex] *
-                                gpuLeavingPremulFactors[neighInd].face[neighDirInd]
-                            );
+                    for (uint faceIndex = 0; faceIndex < 6; faceIndex++) {
+                        vec3 probeSize = gpuProbes[probeIndex].size;
+                        vec3 probePos = gpuProbes[probeIndex].position;
+                        uint neighborStartInd = gpuProbes[probeIndex].neighborSpecBufStart;
+                        uint neighborCount = gpuProbes[probeIndex].neighborSpecCount;
+
+                        // propagation
+                        for (uint i = neighborStartInd; i < neighborStartInd + neighborCount; i++) {
+                            uint neighInd = gpuNeighborIndices[i];
+                            for (uint neighDirInd = 0; neighDirInd < 6; neighDirInd++) {
+                                gpuProbeStates[probeIndex].illumination[faceIndex] += (
+                                    gpuProbeStates_prev[neighInd].illumination[neighDirInd] *
+                                    gpuNeighborFilters[i] *
+                                    gpuNeighborTransfers[i].source[neighDirInd].face[faceIndex] *
+                                    gpuLeavingPremulFactors[neighInd].face[neighDirInd]
+                                );
+                                gpuProbeStates[probeIndex].ghostIllumination[faceIndex] += (
+                                    gpuProbeStates_prev[neighInd].illumination[neighDirInd] *
+                                    gpuNeighborTransfers[i].source[neighDirInd].face[faceIndex] *
+                                    gpuLeavingPremulFactors[neighInd].face[neighDirInd]
+                                );
+                            }
                         }
                     }
                 }
@@ -145,15 +147,16 @@ inline void setupGIUpdate(ComponentRoot &root)
             },
             .snippet = R"glsl(
                 uint probeIndex = gl_GlobalInvocationID.x;
-                uint faceIndex = gl_GlobalInvocationID.y;
 
                 // Skip non-leaf probes since they won't be sampled
                 if (gpuProbeRecursions[probeIndex].childIndex[0] == 0) {
-                    for (uint reflFaceIndex = 0; reflFaceIndex < 6; reflFaceIndex++) {
-                        gpuProbeStates[probeIndex].illumination[faceIndex] += (
-                            gpuProbeStates_prev[probeIndex].illumination[reflFaceIndex] *
-                            gpuReflectionTransfers[probeIndex].face[faceIndex][reflFaceIndex]
-                        );
+                    for (uint faceIndex = 0; faceIndex < 6; faceIndex++) {
+                        for (uint reflFaceIndex = 0; reflFaceIndex < 6; reflFaceIndex++) {
+                            gpuProbeStates[probeIndex].illumination[faceIndex] += (
+                                gpuProbeStates_prev[probeIndex].illumination[reflFaceIndex] *
+                                gpuReflectionTransfers[probeIndex].face[faceIndex][reflFaceIndex]
+                            );
+                        }
                     }
                 }
             )glsl",
@@ -234,8 +237,8 @@ inline void setupGIUpdate(ComponentRoot &root)
                                          },
                                      .computeSetup = {
                                          .invocationCountX = {"gpuProbeCount"},
-                                         .invocationCountY = 6,
-                                         .groupSizeY = 6,
+                                         .invocationCountY = 1,
+                                         .groupSizeY = 1,
                                      }}}));
     methodCollection.registerCompositorOutput("updated_probes");
 
@@ -248,8 +251,8 @@ inline void setupGIUpdate(ComponentRoot &root)
                                          },
                                      .computeSetup = {
                                          .invocationCountX = {"gpuProbeCount"},
-                                         .invocationCountY = 6,
-                                         .groupSizeY = 6,
+                                         .invocationCountY = 1,
+                                         .groupSizeY = 1,
                                      }}}));
     methodCollection.registerCompositorOutput("reflected_probes");
 }
