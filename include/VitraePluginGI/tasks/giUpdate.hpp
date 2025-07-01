@@ -102,15 +102,6 @@ inline void setupGIUpdate(ComponentRoot &root)
                     uint neighborStartInd = gpuProbes[probeIndex].neighborSpecBufStart;
                     uint neighborCount = gpuProbes[probeIndex].neighborSpecCount;
 
-                    // reflection
-                    gpuProbeStates[probeIndex].illumination[faceIndex] = vec4(0.0);
-                    //for (uint reflFaceIndex = 0; reflFaceIndex < 6; reflFaceIndex++) {
-                    //    gpuProbeStates[probeIndex].illumination[faceIndex] += (
-                    //        gpuProbeStates_prev[probeIndex].illumination[reflFaceIndex] *
-                    //        gpuReflectionTransfers[probeIndex].face[reflFaceIndex]
-                    //    );
-                    //}
-
                     // propagation
                     for (uint i = neighborStartInd; i < neighborStartInd + neighborCount; i++) {
                         uint neighInd = gpuNeighborIndices[i];
@@ -122,6 +113,41 @@ inline void setupGIUpdate(ComponentRoot &root)
                                 gpuLeavingPremulFactors[neighInd].face[neighDirInd]
                             );
                         }
+                    }
+                }
+            )glsl",
+        }}),
+        ShaderStageFlag::Compute);
+
+    methodCollection.registerShaderTask(
+        root.getComponent<ShaderSnippetKeeper>().new_asset({ShaderSnippet::StringParams{
+            .inputSpecs{
+                {"gpuProbeStates_prev", TYPE_INFO<ProbeStateBufferPtr>},
+                {"gpuProbes", TYPE_INFO<ProbeBufferPtr>},
+                {"gpuProbeRecursions", TYPE_INFO<ProbeRecursionBufferPtr>},
+                {"gpuReflectionTransfers", TYPE_INFO<ReflectionBufferPtr>},
+
+                {"gi_utilities", TYPE_INFO<void>},
+                {"renewed_probes", TYPE_INFO<void>},
+                {"generated_probe_reflections", TYPE_INFO<void>},
+            },
+            .outputSpecs{
+                {"reflected_probes", TYPE_INFO<void>},
+            },
+            .filterSpecs{
+                {"gpuProbeStates", TYPE_INFO<ProbeStateBufferPtr>},
+            },
+            .snippet = R"glsl(
+                uint probeIndex = gl_GlobalInvocationID.x;
+                uint faceIndex = gl_GlobalInvocationID.y;
+
+                // Skip non-leaf probes since they won't be sampled
+                if (gpuProbeRecursions[probeIndex].childIndex[0] == 0) {
+                    for (uint reflFaceIndex = 0; reflFaceIndex < 6; reflFaceIndex++) {
+                        gpuProbeStates[probeIndex].illumination[faceIndex] += (
+                            gpuProbeStates_prev[probeIndex].illumination[reflFaceIndex] *
+                            gpuReflectionTransfers[probeIndex].face[faceIndex][reflFaceIndex]
+                        );
                     }
                 }
             )glsl",
@@ -192,5 +218,18 @@ inline void setupGIUpdate(ComponentRoot &root)
                                          .groupSizeY = 6,
                                      }}}));
     methodCollection.registerCompositorOutput("updated_probes");
+
+    methodCollection.registerComposeTask(root.getComponent<ComposeComputeKeeper>().new_asset(
+        {ComposeCompute::SetupParams{.root = root,
+                                     .outputSpecs =
+                                         {
+                                             {"reflected_probes", TYPE_INFO<void>},
+                                         },
+                                     .computeSetup = {
+                                         .invocationCountX = {"gpuProbeCount"},
+                                         .invocationCountY = 6,
+                                         .groupSizeY = 6,
+                                     }}}));
+    methodCollection.registerCompositorOutput("reflected_probes");
 }
 }; // namespace VitraePluginGI

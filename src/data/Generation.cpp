@@ -775,7 +775,7 @@ void reflectWSample(const Sample &sample, std::span<const G_ProbeDefinition> gpu
     float recvFactors[6];
 
     for (int i = 0; i < 6; i++) {
-        recvFactors[i] = std::max(0.0f, glm::dot(sample.normal, DIRECTIONS[i]));
+        recvFactors[i] = std::max(0.0f, glm::dot(sample.normal, -DIRECTIONS[i]));
     }
 
     for (int i = 0; i < 6; i++) {
@@ -783,12 +783,15 @@ void reflectWSample(const Sample &sample, std::span<const G_ProbeDefinition> gpu
         glm::vec3 rightDir = glm::cross(frontDir, glm::vec3(0.0f, 1.0f, 0.0f));
         glm::vec3 upDir = glm::cross(frontDir, rightDir);
 
-        float sendFactor = factorTo(frontDir, rightDir, upDir, 1.0f, gpuProbes[index].position,
-                                    gpuProbes[index].size, i);
+        // float sendFactor =
+        //     factorTo(frontDir, rightDir, upDir, 1.0f, gpuProbes[index].position -
+        //     sample.position,
+        //              gpuProbes[index].size, i);
+        float sendFactor = std::max(0.0f, glm::dot(sample.normal, DIRECTIONS[i]));
 
         for (int j = 0; j < 6; j++) {
             float reflFactor = sendFactor * recvFactors[j];
-            denormReflectionTransfers[index].face[i][j] =
+            denormReflectionTransfers[index].face[i][j] +=
                 glm::vec4(glm::vec3(sample.color) * reflFactor, reflFactor);
         }
     }
@@ -802,6 +805,7 @@ void filterWSample(const Sample &sample, std::span<const H_ProbeDefinition> host
 {
     if (hostProbes[index].recursion.childIndex[0][0][0] == 0) {
         blockWSample(sample, gpuProbes, gpuNeighborIndices, neighborFilters, index);
+        reflectWSample(sample, gpuProbes, denormReflectionTransfers, index);
     } else {
         bool x = sample.position.x > hostProbes[index].recursion.pivot.x;
         bool y = sample.position.y > hostProbes[index].recursion.pivot.y;
