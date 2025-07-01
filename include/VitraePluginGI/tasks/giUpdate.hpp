@@ -59,6 +59,7 @@ inline void setupGIUpdate(ComponentRoot &root)
                 uint faceIndex = gl_GlobalInvocationID.y;
 
                 gpuProbeStates[probeIndex].illumination[faceIndex] = vec4(0.0);
+                gpuProbeStates[probeIndex].ghostIllumination[faceIndex] = vec4(0.0);
             )glsl",
         }}),
         ShaderStageFlag::Compute);
@@ -109,6 +110,11 @@ inline void setupGIUpdate(ComponentRoot &root)
                             gpuProbeStates[probeIndex].illumination[faceIndex] += (
                                 gpuProbeStates_prev[neighInd].illumination[neighDirInd] *
                                 gpuNeighborFilters[i] *
+                                gpuNeighborTransfers[i].source[neighDirInd].face[faceIndex] *
+                                gpuLeavingPremulFactors[neighInd].face[neighDirInd]
+                            );
+                            gpuProbeStates[probeIndex].ghostIllumination[faceIndex] += (
+                                gpuProbeStates_prev[neighInd].illumination[neighDirInd] *
                                 gpuNeighborTransfers[i].source[neighDirInd].face[faceIndex] *
                                 gpuLeavingPremulFactors[neighInd].face[neighDirInd]
                             );

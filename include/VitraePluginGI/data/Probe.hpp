@@ -148,11 +148,13 @@ inline const CompoundTypeMeta TYPE_META<G_ProbeSampleCache> = {
 struct G_ProbeState
 {
     glm::vec4 illumination[6];
+    glm::vec4 ghostIllumination[6];
 };
 template <>
 inline const CompoundTypeMeta TYPE_META<G_ProbeState> = {
     GLSLStructMeta{.bodySnippet = R"glsl(
         vec4 illumination[6];
+        vec4 ghostIllumination[6];
     )glsl"},
     STD140LayoutMeta{.std140Size = sizeof(G_ProbeState), .std140Alignment = 4},
 };

@@ -115,5 +115,46 @@ inline void setupGILighting(ComponentRoot &root)
         ShaderStageFlag::Fragment | ShaderStageFlag::Compute);
 
     methodCollection.registerPropertyOption("shade_ambient", "shade_gi_ambient");
+
+    methodCollection.registerShaderTask(
+        root.getComponent<ShaderSnippetKeeper>().new_asset({ShaderSnippet::StringParams{
+            .inputSpecs =
+                {
+                    {"declared_probe_search", TYPE_INFO<void>},
+                    {"gi_probegen", TYPE_INFO<void>},
+                    {"probeSampleOffset", TYPE_INFO<float>, 0.2f},
+                    {"gpuProbes", TYPE_INFO<ProbeBufferPtr>},
+                    {"gpuProbeStates", TYPE_INFO<ProbeStateBufferPtr>},
+                    {"position_world", TYPE_INFO<glm::vec4>},
+                    {"normal_fragment_normalized", TYPE_INFO<glm::vec3>},
+                },
+            .outputSpecs =
+                {
+                    {"shade_gi_ghost_ambient", TYPE_INFO<glm::vec3>},
+                },
+            .snippet = R"glsl(
+                uint ind = getDeepestProbe(
+                    position_world.xyz / position_world.w +
+                    probeSampleOffset * normal_fragment_normalized
+                );
+                
+                bvec3 normalIsNeg = lessThan(-normal_fragment_normalized, vec3(0.0));
+                vec3 absNormal = abs(normal_fragment_normalized) / probeWallSurfaces(ind);
+
+                shade_gi_ghost_ambient = 
+                    gpuProbeStates[ind].ghostIllumination[
+                        0 + int(normalIsNeg.x)
+                    ].rgb * absNormal.x +
+                    gpuProbeStates[ind].ghostIllumination[
+                        2 + int(normalIsNeg.y)
+                    ].rgb * absNormal.y +
+                    gpuProbeStates[ind].ghostIllumination[
+                        4 + int(normalIsNeg.z)
+                    ].rgb * absNormal.z;
+            )glsl",
+        }}),
+        ShaderStageFlag::Fragment | ShaderStageFlag::Compute);
+
+    methodCollection.registerPropertyOption("shade_ambient", "shade_gi_ghost_ambient");
 }
 }; // namespace VitraePluginGI
