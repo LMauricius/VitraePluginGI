@@ -20,6 +20,8 @@ namespace VitraePluginGI
 
 namespace
 {
+const float PI = 3.14159265;
+const float PI2 = PI * 2.0;
 
 struct ProbeWall
 {
@@ -44,8 +46,10 @@ ProbeWall probeWall(glm::vec3 center, glm::vec3 size, uint dirInd)
 glm::vec2 projectedPoint(glm::vec3 point, glm::vec3 frontDir, glm::vec3 rightDir, glm::vec3 upDir)
 {
     float l = length(point);
-    glm::vec3 normPoint = point / l;
-    return glm::vec2(dot(normPoint, rightDir), dot(normPoint, upDir));
+    float viewX = dot(point, rightDir);
+    float viewY = dot(point, upDir);
+    float viewZ = dot(point, frontDir);
+    return glm::vec2(std::atan2(viewX, viewZ), std::atan2(viewY, viewZ));
 }
 
 struct ProbeProjectedWall
@@ -57,6 +61,7 @@ ProbeProjectedWall probeProjectedWall(glm::vec3 center, glm::vec3 size, uint dir
                                       glm::vec3 frontDir, glm::vec3 rightDir, glm::vec3 upDir)
 {
     ProbeWall wall = probeWall(center, size, dirInd);
+
     ProbeProjectedWall projectedWall;
     for (int i = 0; i < 4; i++) {
         projectedWall.points[i] = projectedPoint(wall.points[i], frontDir, rightDir, upDir);
@@ -84,7 +89,7 @@ float triangleArea(glm::vec2 a, glm::vec2 b, glm::vec2 c)
     return 0.5 * abs(a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y));
 }
 
-float factorTo(glm::vec3 frontDir, glm::vec3 rightDir, glm::vec3 upDir, float maxProjSinPerAxis,
+float factorTo(glm::vec3 frontDir, glm::vec3 rightDir, glm::vec3 upDir, float maxProjAngle,
                glm::vec3 dstCenter, glm::vec3 dstSize, uint dstDirIndex)
 {
     // note: we don't need the exact angular surface for the dst, or exact scales here.
@@ -97,21 +102,23 @@ float factorTo(glm::vec3 frontDir, glm::vec3 rightDir, glm::vec3 upDir, float ma
     // Limit wall to light pyramid
     // (Instead of polygonal cutting, just limit each coord to maxProjSinPerAxis angle)
     for (int i = 0; i < 4; i++) {
-        if (projectedWall.points[i].x < -maxProjSinPerAxis)
-            projectedWall.points[i].x = -maxProjSinPerAxis;
-        else if (projectedWall.points[i].x > maxProjSinPerAxis)
-            projectedWall.points[i].x = maxProjSinPerAxis;
-        if (projectedWall.points[i].y < -maxProjSinPerAxis)
-            projectedWall.points[i].y = -maxProjSinPerAxis;
-        else if (projectedWall.points[i].y > maxProjSinPerAxis)
-            projectedWall.points[i].y = maxProjSinPerAxis;
+        if (projectedWall.points[i].x < -maxProjAngle)
+            projectedWall.points[i].x = -maxProjAngle;
+        else if (projectedWall.points[i].x > maxProjAngle)
+            projectedWall.points[i].x = maxProjAngle;
+        if (projectedWall.points[i].y < -maxProjAngle)
+            projectedWall.points[i].y = -maxProjAngle;
+        else if (projectedWall.points[i].y > maxProjAngle)
+            projectedWall.points[i].y = maxProjAngle;
     }
 
     // Calculate projected surface
-    return abs(triangleArea(projectedWall.points[0], projectedWall.points[1],
-                            projectedWall.points[2])) +
-           abs(triangleArea(projectedWall.points[2], projectedWall.points[3],
-                            projectedWall.points[0]));
+    float trar1 = abs(
+        triangleArea(projectedWall.points[0], projectedWall.points[1], projectedWall.points[2]));
+    float trar2 = abs(
+        triangleArea(projectedWall.points[2], projectedWall.points[3], projectedWall.points[0]));
+
+    return trar1 + trar2;
 }
 
 } // namespace
@@ -773,26 +780,52 @@ void reflectWSample(const Sample &sample, std::span<const G_ProbeDefinition> gpu
                     std::span<Reflection> denormReflectionTransfers, std::uint32_t index)
 {
     float recvFactors[6];
+    float recvFactorSum = 0.0;
 
-    for (int i = 0; i < 6; i++) {
-        recvFactors[i] = std::max(0.0f, glm::dot(sample.normal, -DIRECTIONS[i]));
+    for (int srcFaceInd = 0; srcFaceInd < 6; srcFaceInd++) {
+        recvFactors[srcFaceInd] = std::max(0.0f, glm::dot(sample.normal, -DIRECTIONS[srcFaceInd]));
+        recvFactorSum += recvFactors[srcFaceInd];
     }
 
-    for (int i = 0; i < 6; i++) {
+    float sendFactors[6];
+    float sendFactorSum = 0.0;
+
+    G_ProbeDefinition probe = gpuProbes[index];
+
+    for (int dstFaceInd = 0; dstFaceInd < 6; dstFaceInd++) {
         glm::vec3 frontDir = sample.normal;
-        glm::vec3 rightDir = glm::cross(frontDir, glm::vec3(0.0f, 1.0f, 0.0f));
+        glm::vec3 rightDir = (std::abs(sample.normal.y) > 0.7f)
+                                 ? glm::cross(frontDir, glm::vec3(0.0f, 0.0f, 1.0f))
+                                 : glm::cross(frontDir, glm::vec3(0.0f, 1.0f, 0.0f));
         glm::vec3 upDir = glm::cross(frontDir, rightDir);
 
-        // float sendFactor =
-        //     factorTo(frontDir, rightDir, upDir, 1.0f, gpuProbes[index].position -
-        //     sample.position,
-        //              gpuProbes[index].size, i);
-        float sendFactor = std::max(0.0f, glm::dot(sample.normal, DIRECTIONS[i]));
+        sendFactors[dstFaceInd] = factorTo(frontDir, rightDir, upDir, PI * 0.5f,
+                                           gpuProbes[index].position - sample.position,
+                                           gpuProbes[index].size, dstFaceInd);
+        // sendFactors[dstFaceInd] = std::max(0.0f, glm::dot(sample.normal,
+        // DIRECTIONS[dstFaceInd]));
+        sendFactorSum += sendFactors[dstFaceInd];
+    }
 
-        for (int j = 0; j < 6; j++) {
-            float reflFactor = sendFactor * recvFactors[j];
-            denormReflectionTransfers[index].face[i][j] +=
-                glm::vec4(glm::vec3(sample.color) * reflFactor, reflFactor);
+    if (recvFactorSum == 0.0f || sendFactorSum == 0.0f) {
+        std::cout << "Error: recvFactorSum == 0.0f || sendFactorSum == 0.0f" << std::endl;
+        return;
+    }
+
+    if (recvFactorSum == 0.0f || sendFactorSum == 0.0f) {}
+
+    for (int dstFaceInd = 0; dstFaceInd < 6; dstFaceInd++) {
+        for (int srcFaceInd = 0; srcFaceInd < 6; srcFaceInd++) {
+            float relRecvFactor = recvFactors[srcFaceInd] / recvFactorSum;
+            float relSendFactor = sendFactors[dstFaceInd] / sendFactorSum;
+
+            /*denormReflectionTransfers[index].face[dstFaceInd][srcFaceInd] +=
+                glm::vec4(glm::vec3(sample.color) * relRecvFactor * relSendFactor,
+               relSendFactor);*/
+
+            denormReflectionTransfers[index].face[dstFaceInd][srcFaceInd] +=
+                glm::vec4(glm::vec3(sample.color) * relRecvFactor * relSendFactor,
+                          relRecvFactor * relSendFactor);
         }
     }
 }

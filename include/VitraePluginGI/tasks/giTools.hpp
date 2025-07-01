@@ -74,7 +74,10 @@ inline void setupGITools(ComponentRoot &root)
                 
                     // if camera is inside probe, glow
                     if (all(lessThan(abs(camera_position - probePos), probeSize * 0.5)) /*&& faceIndex == 0*/) {
-                        gpuProbeStates[probeIndex].illumination[faceIndex] = vec4(camera_light_strength) * (
+                        gpuProbeStates[probeIndex].illumination[faceIndex] += vec4(camera_light_strength) * (
+                            max(dot(-DIRECTIONS[faceIndex], camera_direction), 0.0)
+                        );
+                        gpuProbeStates[probeIndex].ghostIllumination[faceIndex] += vec4(camera_light_strength) * (
                             max(dot(-DIRECTIONS[faceIndex], camera_direction), 0.0)
                         );
                     } else {

@@ -156,6 +156,10 @@ inline void setupGIUpdate(ComponentRoot &root)
                                 gpuProbeStates_prev[probeIndex].illumination[reflFaceIndex] *
                                 gpuReflectionTransfers[probeIndex].face[faceIndex][reflFaceIndex]
                             );
+                            gpuProbeStates[probeIndex].ghostIllumination[faceIndex] += (
+                                gpuProbeStates_prev[probeIndex].illumination[reflFaceIndex] *
+                                gpuReflectionTransfers[probeIndex].face[faceIndex][reflFaceIndex]
+                            );
                         }
                     }
                 }

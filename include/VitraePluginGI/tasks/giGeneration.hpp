@@ -178,14 +178,14 @@ inline void setupGIGeneration(ComponentRoot &root)
 
                     for (uint srcDirInd = 0; srcDirInd < 6; srcDirInd++) {
                         for (uint neighDirInd = 0; neighDirInd < 6; neighDirInd++) {
-                            if (new_gpuNeighborFilters[srcSpecInd].rgb != vec3(0.0)) {
-                                sendToNeighbors[srcDirInd] = vec3(0.5);
-                            }
-                            //sendToNeighbors[srcDirInd] += vec3(
-                            //    new_gpuNeighborFilters[srcSpecInd].rgb *
-                            //    new_gpuNeighborTransfers[srcSpecInd].source[srcDirInd].face[neighDirInd] *
-                            //    new_gpuLeavingPremulFactors[probeIndex].face[srcDirInd]
-                            //);
+                            //if (new_gpuNeighborFilters[srcSpecInd].rgb != vec3(0.0)) {
+                            //    sendToNeighbors[srcDirInd] = vec3(0.5);
+                            //}
+                            sendToNeighbors[srcDirInd] += vec3(
+                                new_gpuNeighborFilters[srcSpecInd].rgb *
+                                new_gpuNeighborTransfers[srcSpecInd].source[srcDirInd].face[neighDirInd] *
+                                new_gpuLeavingPremulFactors[probeIndex].face[srcDirInd]
+                            );
                         }
                     }
                 }
@@ -214,9 +214,10 @@ inline void setupGIGeneration(ComponentRoot &root)
                             
                         vec4 denormReflectionTransfer = new_gpuDenormReflectionTransfers[probeIndex].face[dstDirInd][srcFaceInd];
                         new_gpuReflectionTransfers[probeIndex].face[dstDirInd][srcFaceInd] = vec4(
+                            //vec3(1.0) /
                             denormReflectionTransfer.rgb /
                             denormSendToSelf *
-                            min(vec3(1.0), max(vec3(0.0), 1.0 - sendToNeighbors[srcFaceInd])),
+                            sendToSelf,
                             1.0
                         );
                     }
