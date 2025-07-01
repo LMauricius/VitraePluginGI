@@ -48,7 +48,7 @@ inline void setupGIUpdate(ComponentRoot &root)
                 },
             .outputSpecs =
                 {
-                    {"renewed_probes", TYPE_INFO<void>},
+                    {"renewed_probe", TYPE_INFO<void>},
                 },
             .filterSpecs =
                 {
@@ -86,7 +86,7 @@ inline void setupGIUpdate(ComponentRoot &root)
                 },
             .outputSpecs =
                 {
-                    {"updated_probes", TYPE_INFO<void>},
+                    {"updated_probe", TYPE_INFO<void>},
                 },
             .filterSpecs =
                 {
@@ -138,7 +138,7 @@ inline void setupGIUpdate(ComponentRoot &root)
                 {"generated_probe_reflections", TYPE_INFO<void>},
             },
             .outputSpecs{
-                {"reflected_probes", TYPE_INFO<void>},
+                {"reflected_probe", TYPE_INFO<void>},
             },
             .filterSpecs{
                 {"gpuProbeStates", TYPE_INFO<ProbeStateBufferPtr>},
@@ -214,9 +214,23 @@ inline void setupGIUpdate(ComponentRoot &root)
 
     methodCollection.registerComposeTask(root.getComponent<ComposeComputeKeeper>().new_asset(
         {ComposeCompute::SetupParams{.root = root,
-                                     .outputSpecs =
+                                     .outputTokenNames = {"renewed_probes"},
+                                     .iterationOutputSpecs =
                                          {
-                                             {"updated_probes", TYPE_INFO<void>},
+                                             {"renewed_probe", TYPE_INFO<void>},
+                                         },
+                                     .computeSetup = {
+                                         .invocationCountX = {"gpuProbeCount"},
+                                         .invocationCountY = 6,
+                                         .groupSizeY = 6,
+                                     }}}));
+
+    methodCollection.registerComposeTask(root.getComponent<ComposeComputeKeeper>().new_asset(
+        {ComposeCompute::SetupParams{.root = root,
+                                     .outputTokenNames = {"updated_probes"},
+                                     .iterationOutputSpecs =
+                                         {
+                                             {"updated_probe", TYPE_INFO<void>},
                                          },
                                      .computeSetup = {
                                          .invocationCountX = {"gpuProbeCount"},
@@ -227,9 +241,10 @@ inline void setupGIUpdate(ComponentRoot &root)
 
     methodCollection.registerComposeTask(root.getComponent<ComposeComputeKeeper>().new_asset(
         {ComposeCompute::SetupParams{.root = root,
-                                     .outputSpecs =
+                                     .outputTokenNames = {"reflected_probes"},
+                                     .iterationOutputSpecs =
                                          {
-                                             {"reflected_probes", TYPE_INFO<void>},
+                                             {"reflected_probe", TYPE_INFO<void>},
                                          },
                                      .computeSetup = {
                                          .invocationCountX = {"gpuProbeCount"},

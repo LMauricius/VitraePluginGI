@@ -51,11 +51,11 @@ inline void setupGITools(ComponentRoot &root)
                     {"camera_light_strength", TYPE_INFO<float>, 50.0f},
 
                     {"gi_utilities", TYPE_INFO<void>},
-                    {"swapped_probes", TYPE_INFO<void>},
+                    {"renewed_probes", TYPE_INFO<void>},
                 },
             .outputSpecs =
                 {
-                    {"tool_probes_cameraLight", TYPE_INFO<void>},
+                    {"tool_probe_cameraLight", TYPE_INFO<void>},
                 },
             .filterSpecs =
                 {
@@ -90,9 +90,10 @@ inline void setupGITools(ComponentRoot &root)
 
     methodCollection.registerComposeTask(root.getComponent<ComposeComputeKeeper>().new_asset(
         {ComposeCompute::SetupParams{.root = root,
-                                     .outputSpecs =
+                                     .outputTokenNames = {"tool_probes_cameraLight"},
+                                     .iterationOutputSpecs =
                                          {
-                                             {"tool_probes_cameraLight", TYPE_INFO<void>},
+                                             {"tool_probe_cameraLight", TYPE_INFO<void>},
                                          },
                                      .computeSetup = {
                                          .invocationCountX = {"gpuProbeCount"},

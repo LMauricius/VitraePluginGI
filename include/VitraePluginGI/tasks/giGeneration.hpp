@@ -76,7 +76,7 @@ inline void setupGIGeneration(ComponentRoot &root)
                 },
             .outputSpecs =
                 {
-                    {"new_generated_probe_transfers", TYPE_INFO<void>},
+                    {"new_generated_probe_transfer", TYPE_INFO<void>},
                 },
             .filterSpecs =
                 {
@@ -136,7 +136,7 @@ inline void setupGIGeneration(ComponentRoot &root)
             },
             .outputSpecs =
                 {
-                    {"new_generated_probe_reflections", TYPE_INFO<void>},
+                    {"new_generated_probe_reflection", TYPE_INFO<void>},
                 },
             .filterSpecs{
                 {"new_gpuReflectionTransfers", TYPE_INFO<ReflectionBufferPtr>},
@@ -232,9 +232,10 @@ inline void setupGIGeneration(ComponentRoot &root)
     methodCollection.registerComposeTask(
         root.getComponent<ComposeComputeKeeper>().new_asset({ComposeCompute::SetupParams{
             .root = root,
-            .outputSpecs =
+            .outputTokenNames = {"new_generated_probe_transfers"},
+            .iterationOutputSpecs =
                 {
-                    {"new_generated_probe_transfers", TYPE_INFO<void>},
+                    {"new_generated_probe_transfer", TYPE_INFO<void>},
                 },
             .computeSetup =
                 {
@@ -248,9 +249,10 @@ inline void setupGIGeneration(ComponentRoot &root)
     methodCollection.registerComposeTask(
         root.getComponent<ComposeComputeKeeper>().new_asset({ComposeCompute::SetupParams{
             .root = root,
-            .outputSpecs =
+            .outputTokenNames = {"new_generated_probe_reflections"},
+            .iterationOutputSpecs =
                 {
-                    {"new_generated_probe_reflections", TYPE_INFO<void>},
+                    {"new_generated_probe_reflection", TYPE_INFO<void>},
                 },
             .computeSetup =
                 {
