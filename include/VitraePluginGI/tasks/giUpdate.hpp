@@ -172,6 +172,70 @@ inline void setupGIUpdate(ComponentRoot &root)
         ShaderStageFlag::Compute);
 
     /*
+    COMPUTE DIRECT LIGHTING
+    */
+
+    methodCollection.registerShaderTask(
+        root.getComponent<ShaderSnippetKeeper>().new_asset({ShaderSnippet::StringParams{
+            .inputSpecs{
+                {"gi_utilities", TYPE_INFO<void>},
+
+                {"gpuProbes", TYPE_INFO<ProbeBufferPtr>},
+
+                {"renewed_probes", TYPE_INFO<void>},
+            },
+            .outputSpecs{
+                {"position4probe_direct", TYPE_INFO<glm::vec4>},
+                {"normal4probe_direct", TYPE_INFO<glm::vec3>},
+            },
+            .filterSpecs{},
+            .snippet = R"glsl(
+                uint probeIndex = gl_GlobalInvocationID.x;
+                uint faceIndex = gl_GlobalInvocationID.y;
+
+                normal4probe_direct = -DIRECTIONS[faceIndex];
+                position4probe_direct = vec4(
+                    gpuProbes[probeIndex].position +
+                    gpuProbes[probeIndex].size * normal4probe_direct * 0.25,
+                    1.0
+                );
+            )glsl",
+        }}),
+        ShaderStageFlag::Compute);
+
+    methodCollection.registerShaderTask(
+        root.getComponent<ShaderSnippetKeeper>().new_asset({ShaderSnippet::StringParams{
+            .inputSpecs{
+                {"gpuProbes", TYPE_INFO<ProbeBufferPtr>},
+                {"shade_probe_direct", TYPE_INFO<glm::vec3>},
+
+                {"gi_utilities", TYPE_INFO<void>},
+                {"gi_probegen", TYPE_INFO<void>},
+
+                {"dbg_giDirectBoost", TYPE_INFO<float>, 1.0f},
+            },
+            .outputSpecs{
+                {"direct_lit_probe", TYPE_INFO<void>},
+            },
+            .filterSpecs{
+                {"gpuProbeStates", TYPE_INFO<ProbeStateBufferPtr>},
+            },
+            .snippet = R"glsl(
+                uint probeIndex = gl_GlobalInvocationID.x;
+                uint faceIndex = gl_GlobalInvocationID.y;
+
+                vec3 light = (
+                    shade_probe_direct * dbg_giDirectBoost *
+                    probeWallSurfaces(probeIndex)[AXES[faceIndex]]
+                );
+    
+                gpuProbeStates[probeIndex].illumination[faceIndex] += vec4(light, 1.0);
+                gpuProbeStates[probeIndex].ghostIllumination[faceIndex] += vec4(light, 1.0);
+            )glsl",
+        }}),
+        ShaderStageFlag::Compute);
+
+    /*
     COMPOSING
     */
     methodCollection.registerComposeTask(
@@ -263,5 +327,34 @@ inline void setupGIUpdate(ComponentRoot &root)
                                          .groupSizeY = 1,
                                      }}}));
     methodCollection.registerCompositorOutput("reflected_probes");
+
+    methodCollection.registerComposeTask(
+        root.getComponent<ComposeComputeKeeper>().new_asset({ComposeCompute::SetupParams{
+            .root = root,
+            .outputTokenNames{"direct_lit_probes"},
+            .iterationOutputSpecs{
+                {"direct_lit_probe", TYPE_INFO<void>},
+            },
+            .computeSetup{
+                .invocationCountX = {"gpuProbeCount"},
+                .invocationCountY = 6,
+                .groupSizeY = 6,
+            },
+        }}));
+
+    methodCollection.registerComposeTask(
+        dynasma::makeStandalone<ComposeAdaptTasks>(ComposeAdaptTasks::SetupParams{
+            .root = root,
+            .adaptorAliases{
+                {"direct_lit_probes_diffuse", "direct_lit_probes"},
+                {"shade_probe_direct", "shade_diffuse"},
+                {"position_world", "position4probe_direct"},
+                {"normal_fragment_normalized", "normal4probe_direct"},
+            },
+            .desiredOutputs{{"direct_lit_probes_diffuse", TYPE_INFO<void>}},
+            .friendlyName = "Directly light probes w/ diffuse",
+        }));
+
+    methodCollection.registerCompositorOutput("direct_lit_probes_diffuse");
 }
 }; // namespace VitraePluginGI
