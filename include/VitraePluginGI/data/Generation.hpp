@@ -54,7 +54,7 @@ void generateProbeList(std::span<const Sample> samples, glm::vec3 worldCenter, g
                        bool useDenormalizedCells, bool useQuadTree,
                        std::vector<H_ProbeDefinition> &probes, glm::vec3 &worldStart);
 
-void generateTransfers(std::span<const Sample> samples,
+void generateTransfers(std::span<const Sample> samples, float minProbeSize,
                        std::span<const H_ProbeDefinition> hostProbes,
                        std::span<const G_ProbeDefinition> probes,
                        std::span<const std::uint32_t> neighborIndices,

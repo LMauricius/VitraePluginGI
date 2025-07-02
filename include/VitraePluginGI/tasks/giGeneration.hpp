@@ -388,7 +388,7 @@ inline void setupGIGeneration(ComponentRoot &root)
                                                gpuLeavingPremulFactors, gpuNeighborIndices,
                                                gpuNeighborOwnerIndices, gpuNeighborTransfers,
                                                gpuNeighborFilters);
-                        generateTransfers(std::span<const Sample>(samples), probes,
+                        generateTransfers(std::span<const Sample>(samples), minProbeSize, probes,
                                           gpuProbes.getElements(), gpuNeighborIndices.getElements(),
                                           gpuNeighborFilters.getMutableElements(),
                                           gpuDenormReflectionTransfers.getMutableElements());

@@ -758,8 +758,10 @@ void blockWSample(const Sample &sample, std::span<const G_ProbeDefinition> gpuPr
          neighSpecInd++) {
         auto neighInd = neighborIndices[neighSpecInd];
         auto blocksNeighProbe = blocks(gpuProbes[neighInd].position);
+        auto towardsNeighProbe = glm::dot(gpuProbes[index].position - gpuProbes[neighInd].position,
+                                          sample.normal) >= 0.0f;
 
-        if (blocksNeighProbe) {
+        if (towardsNeighProbe) {
             // block neigh from current
             neighborFilters[neighSpecInd] = glm::vec4(0.0f);
 
@@ -799,9 +801,15 @@ void reflectWSample(const Sample &sample, std::span<const G_ProbeDefinition> gpu
                                  : glm::cross(frontDir, glm::vec3(0.0f, 1.0f, 0.0f));
         glm::vec3 upDir = glm::cross(frontDir, rightDir);
 
-        sendFactors[dstFaceInd] = factorTo(frontDir, rightDir, upDir, PI * 0.5f,
-                                           gpuProbes[index].position - sample.position,
-                                           gpuProbes[index].size, dstFaceInd);
+        if (glm::dot(gpuProbes[index].position + DIRECTIONS[dstFaceInd] * probe.size * 0.5f -
+                         sample.position,
+                     DIRECTIONS[dstFaceInd]) > 0.0f) {
+            sendFactors[dstFaceInd] = factorTo(frontDir, rightDir, upDir, PI * 0.5f,
+                                               gpuProbes[index].position - sample.position,
+                                               gpuProbes[index].size, dstFaceInd);
+        } else {
+            sendFactors[dstFaceInd] = 0.0f;
+        }
         // sendFactors[dstFaceInd] = std::max(0.0f, glm::dot(sample.normal,
         // DIRECTIONS[dstFaceInd]));
         sendFactorSum += sendFactors[dstFaceInd];
@@ -830,7 +838,8 @@ void reflectWSample(const Sample &sample, std::span<const G_ProbeDefinition> gpu
     }
 }
 
-void filterWSample(const Sample &sample, std::span<const H_ProbeDefinition> hostProbes,
+void filterWSample(const Sample &sample, float selectionOffset,
+                   std::span<const H_ProbeDefinition> hostProbes,
                    std::span<const G_ProbeDefinition> gpuProbes,
                    std::span<const std::uint32_t> gpuNeighborIndices,
                    std::span<glm::vec4> neighborFilters,
@@ -840,20 +849,21 @@ void filterWSample(const Sample &sample, std::span<const H_ProbeDefinition> host
         blockWSample(sample, gpuProbes, gpuNeighborIndices, neighborFilters, index);
         reflectWSample(sample, gpuProbes, denormReflectionTransfers, index);
     } else {
-        bool x = sample.position.x > hostProbes[index].recursion.pivot.x;
-        bool y = sample.position.y > hostProbes[index].recursion.pivot.y;
-        bool z = sample.position.z > hostProbes[index].recursion.pivot.z;
+        glm::vec3 adjPosition = sample.position + sample.normal * selectionOffset;
+        bool x = adjPosition.x > hostProbes[index].recursion.pivot.x;
+        bool y = adjPosition.y > hostProbes[index].recursion.pivot.y;
+        bool z = adjPosition.z > hostProbes[index].recursion.pivot.z;
         if (hostProbes[index].recursion.childIndex[x][y][z] == 0) {
             std::cout << "Error: No child index @filterWSample" << std::endl;
         } else {
-            filterWSample(sample, hostProbes, gpuProbes, gpuNeighborIndices, neighborFilters,
-                          denormReflectionTransfers,
+            filterWSample(sample, selectionOffset, hostProbes, gpuProbes, gpuNeighborIndices,
+                          neighborFilters, denormReflectionTransfers,
                           hostProbes[index].recursion.childIndex[x][y][z]);
         }
     }
 }
 
-void generateTransfers(std::span<const Sample> samples,
+void generateTransfers(std::span<const Sample> samples, float minProbeSize,
                        std::span<const H_ProbeDefinition> hostProbes,
                        std::span<const G_ProbeDefinition> probes,
                        std::span<const std::uint32_t> neighborIndices,
@@ -929,8 +939,8 @@ void generateTransfers(std::span<const Sample> samples,
 
     // Put samples in new (and some old) probes
     for (auto &sample : samples) {
-        filterWSample(sample, hostProbes, probes, neighborIndices, neighborFilters,
-                      denormReflectionTransfers, 0);
+        filterWSample(sample, minProbeSize * 0.15f, hostProbes, probes, neighborIndices,
+                      neighborFilters, denormReflectionTransfers, 0);
     }
 }
 
