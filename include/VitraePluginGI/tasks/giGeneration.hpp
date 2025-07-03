@@ -112,8 +112,8 @@ inline void setupGIGeneration(ComponentRoot &root)
                     factorToProbe(probeIndex, probeIndex, myDirInd, myDirInd)
                 );
 
-                if (totalLeaving > 0.05) {
-                    new_gpuLeavingPremulFactors[probeIndex].face[myDirInd] = 0.95 / totalLeaving;
+                if (totalLeaving > 0.02) {
+                    new_gpuLeavingPremulFactors[probeIndex].face[myDirInd] = 0.99 / totalLeaving;
                 } else {
                     new_gpuLeavingPremulFactors[probeIndex].face[myDirInd] = 0.0;
                 }
@@ -124,7 +124,6 @@ inline void setupGIGeneration(ComponentRoot &root)
     methodCollection.registerShaderTask(
         root.getComponent<ShaderSnippetKeeper>().new_asset({ShaderSnippet::StringParams{
             .inputSpecs{
-                {"new_gpuProbes", TYPE_INFO<ProbeBufferPtr>},
                 {"new_gpuNeighborIndices", TYPE_INFO<NeighborIndexBufferPtr>},
                 {"new_gpuDenormReflectionTransfers", TYPE_INFO<ReflectionBufferPtr>},
                 {"new_gpuNeighborTransfers", TYPE_INFO<NeighborTransferBufferPtr>},
@@ -139,6 +138,7 @@ inline void setupGIGeneration(ComponentRoot &root)
                     {"new_generated_probe_reflection", TYPE_INFO<void>},
                 },
             .filterSpecs{
+                {"new_gpuProbes", TYPE_INFO<ProbeBufferPtr>},
                 {"new_gpuReflectionTransfers", TYPE_INFO<ReflectionBufferPtr>},
             },
             .snippet = R"glsl(
@@ -155,6 +155,9 @@ inline void setupGIGeneration(ComponentRoot &root)
                     vec3(0.0)
                 );
 
+                new_gpuProbes[probeIndex].interpolationMin = new_gpuProbes[probeIndex].position - 10000.0;
+                new_gpuProbes[probeIndex].interpolationMax = new_gpuProbes[probeIndex].position + 10000.0;
+
                 for (
                     uint neighSpecInd = new_gpuProbes[probeIndex].neighborSpecBufStart;
                     neighSpecInd < new_gpuProbes[probeIndex].neighborSpecBufStart +
@@ -162,6 +165,37 @@ inline void setupGIGeneration(ComponentRoot &root)
                     neighSpecInd++
                 ) {
                     uint neighInd = new_gpuNeighborIndices[neighSpecInd];
+
+                    if (new_gpuProbes[neighInd].position.x < new_gpuProbes[probeIndex].position.x - new_gpuProbes[probeIndex].size.x * 0.5)
+                        new_gpuProbes[probeIndex].interpolationMin.x = max(
+                            new_gpuProbes[probeIndex].interpolationMin.x,
+                            new_gpuProbes[neighInd].position.x
+                        );
+                    else if (new_gpuProbes[neighInd].position.x > new_gpuProbes[probeIndex].position.x + new_gpuProbes[probeIndex].size.x * 0.5)
+                        new_gpuProbes[probeIndex].interpolationMax.x = min(
+                            new_gpuProbes[probeIndex].interpolationMax.x,
+                            new_gpuProbes[neighInd].position.x
+                        );
+                    if (new_gpuProbes[neighInd].position.y < new_gpuProbes[probeIndex].position.y - new_gpuProbes[probeIndex].size.y * 0.5)
+                        new_gpuProbes[probeIndex].interpolationMin.y = max(
+                            new_gpuProbes[probeIndex].interpolationMin.y,
+                            new_gpuProbes[neighInd].position.y
+                        );
+                    else if (new_gpuProbes[neighInd].position.y > new_gpuProbes[probeIndex].position.y + new_gpuProbes[probeIndex].size.y * 0.5)
+                        new_gpuProbes[probeIndex].interpolationMax.y = min(
+                            new_gpuProbes[probeIndex].interpolationMax.y,
+                            new_gpuProbes[neighInd].position.y
+                        );
+                    if (new_gpuProbes[neighInd].position.z < new_gpuProbes[probeIndex].position.z - new_gpuProbes[probeIndex].size.z * 0.5)
+                        new_gpuProbes[probeIndex].interpolationMin.z = max(
+                            new_gpuProbes[probeIndex].interpolationMin.z,
+                            new_gpuProbes[neighInd].position.z
+                        );
+                    else if (new_gpuProbes[neighInd].position.z > new_gpuProbes[probeIndex].position.z + new_gpuProbes[probeIndex].size.z * 0.5)
+                        new_gpuProbes[probeIndex].interpolationMax.z = min(
+                            new_gpuProbes[probeIndex].interpolationMax.z,
+                            new_gpuProbes[neighInd].position.z
+                        );
 
                     uint srcSpecInd = 0;
                     for (

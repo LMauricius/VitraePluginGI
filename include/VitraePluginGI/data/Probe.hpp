@@ -99,6 +99,10 @@ struct G_ProbeDefinition
     std::uint32_t neighborSpecBufStart;
     glm::vec3 size;
     std::uint32_t neighborSpecCount;
+    glm::vec3 interpolationMin;
+    std::uint32_t _pad1;
+    glm::vec3 interpolationMax;
+    std::uint32_t _pad2;
 };
 template <>
 inline const CompoundTypeMeta TYPE_META<G_ProbeDefinition> = {
@@ -107,6 +111,10 @@ inline const CompoundTypeMeta TYPE_META<G_ProbeDefinition> = {
         uint neighborSpecBufStart;
         vec3 size;
         uint neighborSpecCount;
+        vec3 interpolationMin;
+        uint _pad1;
+        vec3 interpolationMax;
+        uint _pad2;
     )glsl"},
     STD140LayoutMeta{.std140Size = sizeof(G_ProbeDefinition), .std140Alignment = 16},
 };

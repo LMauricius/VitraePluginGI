@@ -156,5 +156,98 @@ inline void setupGILighting(ComponentRoot &root)
         ShaderStageFlag::Fragment | ShaderStageFlag::Compute);
 
     methodCollection.registerPropertyOption("shade_ambient", "shade_gi_ghost_ambient");
+
+    methodCollection.registerShaderTask(
+        root.getComponent<ShaderSnippetKeeper>().new_asset({ShaderSnippet::StringParams{
+            .inputSpecs{
+                {"declared_probe_search", TYPE_INFO<void>},
+                {"gi_probegen", TYPE_INFO<void>},
+                {"probeSampleOffset", TYPE_INFO<float>, 0.2f},
+                {"gpuProbes", TYPE_INFO<ProbeBufferPtr>},
+                {"gpuNeighborIndices", TYPE_INFO<NeighborIndexBufferPtr>},
+                {"gpuProbeStates", TYPE_INFO<ProbeStateBufferPtr>},
+                {"position_world", TYPE_INFO<glm::vec4>},
+                {"normal_fragment_normalized", TYPE_INFO<glm::vec3>},
+
+                {"probeInterpolationBilinFactor", TYPE_INFO<float>, 1.0f},
+                {"probeInterpolationRadialFactor", TYPE_INFO<float>, 1.0f},
+            },
+            .outputSpecs{
+                {"shade_gi_ghost_ambient_interp", TYPE_INFO<glm::vec3>},
+            },
+            .snippet = R"glsl(
+                vec3 pos = position_world.xyz / position_world.w;
+                uint ind = getDeepestProbe(
+                    pos + probeSampleOffset * normal_fragment_normalized
+                );
+                
+                bvec3 normalIsNeg = lessThan(-normal_fragment_normalized, vec3(0.0));
+                vec3 absNormal = abs(normal_fragment_normalized);
+
+                shade_gi_ghost_ambient_interp = vec3(0.0);
+                float factorSum = 0.0;
+
+                vec3 myNormal = absNormal / probeWallSurfaces(ind);
+                vec3 myFactorNormOffset = abs(
+                    (pos - 0.5*(gpuProbes[ind].interpolationMax + gpuProbes[ind].interpolationMin)) /
+                    (gpuProbes[ind].interpolationMax - gpuProbes[ind].interpolationMin) * 2.0
+                );
+                float myFactor = (
+                    probeInterpolationBilinFactor *
+                        max(0.0, 1.0 - myFactorNormOffset.x) *
+                        max(0.0, 1.0 - myFactorNormOffset.y) *
+                        max(0.0, 1.0 - myFactorNormOffset.z) +
+                    probeInterpolationRadialFactor *
+                        max(0.0, 1.0 - length(myFactorNormOffset))
+                );
+                shade_gi_ghost_ambient_interp += 
+                    gpuProbeStates[ind].ghostIllumination[
+                        0 + int(normalIsNeg.x)
+                    ].rgb * myNormal.x * myFactor +
+                    gpuProbeStates[ind].ghostIllumination[
+                        2 + int(normalIsNeg.y)
+                    ].rgb * myNormal.y * myFactor +
+                    gpuProbeStates[ind].ghostIllumination[
+                        4 + int(normalIsNeg.z)
+                    ].rgb * myNormal.z * myFactor;
+                factorSum += myFactor;
+
+                for (uint neighSpecInd = gpuProbes[ind].neighborSpecBufStart;
+                     neighSpecInd < gpuProbes[ind].neighborSpecBufStart + gpuProbes[ind].neighborSpecCount;
+                     neighSpecInd++) {
+                    uint neighInd = gpuNeighborIndices[neighSpecInd];
+
+                    vec3 neighNormal = absNormal / probeWallSurfaces(neighInd);
+                    vec3 neighFactorNormOffset = abs(
+                        (pos - 0.5*(gpuProbes[neighInd].interpolationMax + gpuProbes[neighInd].interpolationMin)) /
+                        (gpuProbes[neighInd].interpolationMax - gpuProbes[neighInd].interpolationMin) * 2.0
+                    );
+                    float neighFactor = (
+                        probeInterpolationBilinFactor *
+                            max(0.0, 1.0 - neighFactorNormOffset.x) *
+                            max(0.0, 1.0 - neighFactorNormOffset.y) *
+                            max(0.0, 1.0 - neighFactorNormOffset.z) +
+                        probeInterpolationRadialFactor *
+                            max(0.0, 1.0 - length(neighFactorNormOffset))
+                    );
+                    shade_gi_ghost_ambient_interp += 
+                        gpuProbeStates[neighInd].ghostIllumination[
+                            0 + int(normalIsNeg.x)
+                        ].rgb * neighNormal.x * neighFactor +
+                        gpuProbeStates[neighInd].ghostIllumination[
+                            2 + int(normalIsNeg.y)
+                        ].rgb * neighNormal.y * neighFactor +
+                        gpuProbeStates[neighInd].ghostIllumination[
+                            4 + int(normalIsNeg.z)
+                        ].rgb * neighNormal.z * neighFactor;
+                    factorSum += neighFactor;
+                }
+
+                shade_gi_ghost_ambient_interp /= factorSum;
+            )glsl",
+        }}),
+        ShaderStageFlag::Fragment | ShaderStageFlag::Compute);
+
+    methodCollection.registerPropertyOption("shade_ambient", "shade_gi_ghost_ambient_interp");
 }
 }; // namespace VitraePluginGI
