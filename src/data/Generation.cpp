@@ -384,8 +384,8 @@ void prepareScene(const Scene &scene, SamplingScene &smpScene, std::size_t &stat
 void sampleScene(const SamplingScene &smpScene, std::size_t numSamples,
                  std::vector<Sample> &outSamples)
 {
-    static std::random_device s_rd;
-    static std::mt19937 s_gen(s_rd());
+    // static std::random_device s_rd;
+    static std::mt19937 s_gen(101);
     static std::uniform_real_distribution<double> s_dist(0.0f, 1.0f);
 
     MMETER_SCOPE_PROFILER("GI::sampleScene");
@@ -568,6 +568,7 @@ void extractChildNeighbors(std::vector<H_ProbeDefinition> &probes, std::uint32_t
     // -> add this probe as neighbor
     if (!anyChildIsNeighbor) {
         probes[index].neighborIndices.push_back(neighIndex);
+        probes[neighIndex].neighborIndices.push_back(index);
     }
 }
 
@@ -738,6 +739,17 @@ void generateProbeList(std::span<const Sample> samples, glm::vec3 worldCenter, g
 
     // Generate neighbors
     generateChildNeighbors(probes, 0);
+
+    // Delete duplicate neighbors and lists in parent cells
+    for (auto &probe : probes) {
+        if (probe.recursion.childIndex[0][0][0] == 0) {
+            probe.neighborIndices.clear();
+        } else {
+            std::set<std::uint32_t> uniqueNeighbors(probe.neighborIndices.begin(),
+                                                    probe.neighborIndices.end());
+            probe.neighborIndices.assign(uniqueNeighbors.begin(), uniqueNeighbors.end());
+        }
+    }
 
     // Generate world start
     worldStart = probes[0].position - probes[0].size / 2.0f;

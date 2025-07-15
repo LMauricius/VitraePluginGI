@@ -271,6 +271,79 @@ inline void setupGIVisualization(ComponentRoot &root)
                 .friendlyName = "Render GI probe frames"}));
 
         methodCollection.registerCompositorOutput("displayed_GI_probe_frames");
+
+        //
+        //
+
+        methodCollection.registerShaderTask(
+            root.getComponent<ShaderSnippetKeeper>().new_asset({ShaderSnippet::StringParams{
+                .inputSpecs =
+                    {
+                        StandardParam::index4data,
+                        {"gi_utilities", TYPE_INFO<void>},
+                        StandardParam::normal,
+                        {"probe_subposition", TYPE_INFO<glm::vec3>},
+                        {"gpuReflectionTransfers", TYPE_INFO<ReflectionBufferPtr>},
+                        {"generated_probe_reflections", TYPE_INFO<void>},
+                    },
+                .outputSpecs =
+                    {
+                        {"probe_reflColor", TYPE_INFO<glm::vec4>},
+                    },
+                .snippet = R"glsl(
+                int dir = 0;
+                if (probe_subposition.x > 0.99) dir = 0;
+                else if (probe_subposition.x < -0.99) dir = 1;
+                else if (probe_subposition.y > 0.99) dir = 2;
+                else if (probe_subposition.y < -0.99) dir = 3;
+                else if (probe_subposition.z > 0.99) dir = 4;
+                else if (probe_subposition.z < -0.99) dir = 5;
+
+                probe_reflColor = vec4(0);
+                for (int i = 0; i < 6; i++) {
+                    probe_reflColor += gpuReflectionTransfers[index4data].face[i][dir];
+                }
+                probe_reflColor = vec4(probe_reflColor.rgb, 1.0);
+            )glsl",
+            }}),
+            ShaderStageFlag::Fragment);
+
+        // register task
+
+        methodCollection.registerComposeTask(
+            root.getComponent<ComposeIndexRenderKeeper>().new_asset_k(
+                ComposeIndexRender::SetupParams{
+                    .root = root,
+                    .sizeParamName = "gpuProbeCount",
+                    .inputTokenNames = {},
+                    .outputTokenNames = {"rendered_GI_probe_refl"},
+                    .p_dataPointModel = p_probeModel,
+                    .rasterizing =
+                        {
+                            .vertexPositionOutputPropertyName = "probe_position4projection",
+                            .modelFormPurpose = Purposes::visual,
+                            .cullingMode = CullingMode::None,
+                            .rasterizingMode = RasterizingMode::DerivationalFillCenters,
+                        },
+                }));
+
+        methodCollection.registerComposeTask(
+            dynasma::makeStandalone<ComposeAdaptTasks>(ComposeAdaptTasks::SetupParams{
+                .root = root,
+                .adaptorAliases =
+                    {
+                        {"displayed_GI_probe_refl", "rendered_GI_probe_refl"},
+                        {"position_view", "position_camera_view"},
+                        {"fs_target", "fs_display"},
+                        {"phong_shade", "probe_reflColor"},
+                    },
+                .desiredOutputs = {ParamSpec{
+                    "displayed_GI_probe_refl",
+                    TYPE_INFO<void>,
+                }},
+                .friendlyName = "Render GI probe refl"}));
+
+        methodCollection.registerCompositorOutput("displayed_GI_probe_refl");
     }
 
     /*
