@@ -568,7 +568,9 @@ void extractChildNeighbors(std::vector<H_ProbeDefinition> &probes, std::uint32_t
     // -> add this probe as neighbor
     if (!anyChildIsNeighbor) {
         probes[index].neighborIndices.push_back(neighIndex);
-        probes[neighIndex].neighborIndices.push_back(index);
+        if (probes[index].recursion.childIndex[0][0][0] == 0) {
+            probes[neighIndex].neighborIndices.push_back(index);
+        }
     }
 }
 
@@ -742,12 +744,17 @@ void generateProbeList(std::span<const Sample> samples, glm::vec3 worldCenter, g
 
     // Delete duplicate neighbors and lists in parent cells
     for (auto &probe : probes) {
-        if (probe.recursion.childIndex[0][0][0] == 0) {
+        if (probe.recursion.childIndex[0][0][0] != 0) {
             probe.neighborIndices.clear();
         } else {
             std::set<std::uint32_t> uniqueNeighbors(probe.neighborIndices.begin(),
                                                     probe.neighborIndices.end());
-            probe.neighborIndices.assign(uniqueNeighbors.begin(), uniqueNeighbors.end());
+            probe.neighborIndices.clear();
+            for (auto neighind : uniqueNeighbors) {
+                if (probes[neighind].recursion.childIndex[0][0][0] == 0) {
+                    probe.neighborIndices.push_back(neighind);
+                }
+            }
         }
     }
 
@@ -828,7 +835,7 @@ void reflectWSample(const Sample &sample, std::span<const G_ProbeDefinition> gpu
     }
 
     if (recvFactorSum == 0.0f || sendFactorSum == 0.0f) {
-        std::cout << "Error: recvFactorSum == 0.0f || sendFactorSum == 0.0f" << std::endl;
+        // std::cout << "Error: recvFactorSum == 0.0f || sendFactorSum == 0.0f" << std::endl;
         return;
     }
 
