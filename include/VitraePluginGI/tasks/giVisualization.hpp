@@ -232,6 +232,33 @@ inline void setupGIVisualization(ComponentRoot &root)
             )glsl",
             }}),
             ShaderStageFlag::Vertex);
+        // Register fragment shader
+
+        methodCollection.registerShaderTask(
+            root.getComponent<ShaderSnippetKeeper>().new_asset({ShaderSnippet::StringParams{
+                .inputSpecs =
+                    {
+                        {"gi_utilities", TYPE_INFO<void>},
+                        {"gi_random", TYPE_INFO<void>},
+
+                        {"probe_subposition", TYPE_INFO<glm::vec3>},
+                        {"probeindf", TYPE_INFO<float>},
+                    },
+                .outputSpecs =
+                    {
+                        {"probe_subdir", TYPE_INFO<std::uint32_t>},
+                    },
+                .snippet = R"glsl(
+                    int probeind = int(probeindf);
+                    if (probe_subposition.x > 0.99) probe_subdir = 0;
+                    else if (probe_subposition.x < -0.99) probe_subdir = 1;
+                    else if (probe_subposition.y > 0.99) probe_subdir = 2;
+                    else if (probe_subposition.y < -0.99) probe_subdir = 3;
+                    else if (probe_subposition.z > 0.99) probe_subdir = 4;
+                    else if (probe_subposition.z < -0.99) probe_subdir = 5;
+                )glsl",
+            }}),
+            ShaderStageFlag::Fragment);
     }
 
     { // PROBE STRUCTURE VISUALIZATION
@@ -325,7 +352,7 @@ inline void setupGIVisualization(ComponentRoot &root)
                         {"camera_position", TYPE_INFO<glm::vec3>},
 
                         StandardParam::normal,
-                        {"probe_subposition", TYPE_INFO<glm::vec3>},
+                        {"probe_subdir", TYPE_INFO<std::uint32_t>},
                         {"probe_subposition4world", TYPE_INFO<glm::vec3>},
                         {"gpuProbes", TYPE_INFO<ProbeBufferPtr>},
                         {"gpuReflectionTransfers", TYPE_INFO<ReflectionBufferPtr>},
@@ -341,15 +368,8 @@ inline void setupGIVisualization(ComponentRoot &root)
                     },
                 .snippet = R"glsl(
                 int probeind = int(probeindf);
-                int dir = 0;
-                if (probe_subposition.x > 0.99) dir = 0;
-                else if (probe_subposition.x < -0.99) dir = 1;
-                else if (probe_subposition.y > 0.99) dir = 2;
-                else if (probe_subposition.y < -0.99) dir = 3;
-                else if (probe_subposition.z > 0.99) dir = 4;
-                else if (probe_subposition.z < -0.99) dir = 5;
 
-                if (dot(DIRECTIONS[dir], probe_subposition4world - camera_position) < 0.0) {
+                if (dot(DIRECTIONS[probe_subdir], probe_subposition4world - camera_position) < 0.0) {
                     discard;
                 }
 
@@ -362,7 +382,7 @@ inline void setupGIVisualization(ComponentRoot &root)
 
                     vec4 probeNeighLeaveColor = vec4(0);
                     for (int i=0; i < 6; i++) {
-                        probeNeighLeaveColor += gpuNeighborTransfers[neighspecind].source[dir].face[i];
+                        probeNeighLeaveColor += gpuNeighborTransfers[neighspecind].source[probe_subdir].face[i];
                     }
 
                     probeNeighLeaveColor *= gpuNeighborFilters[neighspecind];
@@ -381,7 +401,7 @@ inline void setupGIVisualization(ComponentRoot &root)
                 probe_reflColor = vec4(0);
                 if (true) {
                     for (int i = 0; i < 6; i++) {
-                        probe_reflColor += gpuReflectionTransfers[probeind].face[i][dir];
+                        probe_reflColor += gpuReflectionTransfers[probeind].face[i][probe_subdir];
                     }
                     probe_reflColor = vec4(
                         probe_reflColor.rgb,
