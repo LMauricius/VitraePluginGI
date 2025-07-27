@@ -38,92 +38,96 @@ inline void setupGIVisualization(ComponentRoot &root)
 {
     MethodCollection &methodCollection = root.getComponent<MethodCollection>();
 
-    /*
-    RANDOM
-    */
-    methodCollection.registerComposeTask(
-        dynasma::makeStandalone<ComposeFunction>(ComposeFunction::SetupParams{
-            .inputSpecs = {},
-            .outputSpecs = {{"randSeed", TYPE_INFO<std::uint32_t>}},
-            .filterSpecs = {},
-            .p_function =
-                [&root](const RenderComposeContext &context) {
-                    context.properties.set("randSeed", (std::uint32_t)(std::rand() % 1000));
-                },
-            .friendlyName = "Generate random seed",
-        }));
+    { // RANDOM
 
-    methodCollection.registerShaderTask(
-        root.getComponent<ShaderHeaderKeeper>().new_asset({ShaderHeader::StringParams{
-            .inputSpecs = {{"randSeed", TYPE_INFO<std::uint32_t>}},
-            .outputSpecs = {{"gi_random", TYPE_INFO<void>}},
-            .snippet = R"glsl(
+        methodCollection.registerComposeTask(
+            dynasma::makeStandalone<ComposeFunction>(ComposeFunction::SetupParams{
+                .inputSpecs = {},
+                .outputSpecs = {{"randSeed", TYPE_INFO<std::uint32_t>}},
+                .filterSpecs = {},
+                .p_function =
+                    [&root](const RenderComposeContext &context) {
+                        context.properties.set("randSeed", (std::uint32_t)(std::rand() % 1000));
+                    },
+                .friendlyName = "Generate random seed",
+            }));
+
+        methodCollection.registerShaderTask(
+            root.getComponent<ShaderHeaderKeeper>().new_asset({ShaderHeader::StringParams{
+                .inputSpecs = {{"randSeed", TYPE_INFO<std::uint32_t>}},
+                .outputSpecs = {{"gi_random", TYPE_INFO<void>}},
+                .snippet = R"glsl(
             float rand(vec3 co) {
                 vec2 s = co.xy + co.z + vec2(float(randSeed) / 100.0);
                 return fract(sin(dot(s, vec2(12.9898, 78.233))) * 43758.5453);
             }
             )glsl",
-            .friendlyName = "GI constants",
-        }}),
-        ShaderStageFlag::Fragment | ShaderStageFlag::Compute);
+                .friendlyName = "GI constants",
+            }}),
+            ShaderStageFlag::Fragment | ShaderStageFlag::Compute);
+    }
 
-    /*
-    SAMPLE RENDERING
-    */
+    dynasma::FirmPtr<Model> p_visualModel;
+    { // SAMPLE RENDERING
 
-    auto p_visualScene = dynasma::makeStandalone<Scene>(Scene::FileLoadParams{
-        .root = root, .filepath = "../../Plugins/GI/media/dataPoint/dataPoint.obj"});
-    auto p_visualModel = p_visualScene->modelProps.at(0).p_model;
+        // Load model
 
-    methodCollection.registerComposeTask(
-        root.getComponent<ComposeDataRenderKeeper>().new_asset({ComposeDataRender::SetupParams{
-            .root = root,
-            .inputSpecs =
-                {
-                    {"giSamples", TYPE_INFO<std::vector<Sample>>},
-                },
-            .outputSpecs = {{"rendered_GI_samples", TYPE_INFO<void>}},
-            .p_dataPointModel = p_visualModel,
-            .dataGenerator =
-                [](const RenderComposeContext &context,
-                   ComposeDataRender::RenderCallback callback) {
-                    auto &samples = context.properties.get("giSamples").get<std::vector<Sample>>();
+        auto p_visualScene = dynasma::makeStandalone<Scene>(Scene::FileLoadParams{
+            .root = root, .filepath = "../../Plugins/GI/media/dataPoint/dataPoint.obj"});
+        p_visualModel = p_visualScene->modelProps.at(0).p_model;
 
-                    for (auto &sample : samples) {
-                        SimpleTransformation trans;
-                        trans.position = sample.position;
-                        // trans.rotation = glm::quatLookAt(sample.normal, glm::vec3(0, 1, 0));
-                        trans.rotation = glm::quat(glm::vec3(0, 0, 1), sample.normal);
-                        trans.scaling = {1.0f, 1.0f, 1.0f};
+        // register tasks
 
-                        callback(trans.getModelMatrix());
-                    }
-                },
-            .rasterizing = {
-                .vertexPositionOutputPropertyName = "position_view",
-                .modelFormPurpose = Purposes::visual,
-            }}}));
+        methodCollection.registerComposeTask(
+            root.getComponent<ComposeDataRenderKeeper>().new_asset({ComposeDataRender::SetupParams{
+                .root = root,
+                .inputSpecs =
+                    {
+                        {"giSamples", TYPE_INFO<std::vector<Sample>>},
+                    },
+                .outputSpecs = {{"rendered_GI_samples", TYPE_INFO<void>}},
+                .p_dataPointModel = p_visualModel,
+                .dataGenerator =
+                    [](const RenderComposeContext &context,
+                       ComposeDataRender::RenderCallback callback) {
+                        auto &samples =
+                            context.properties.get("giSamples").get<std::vector<Sample>>();
 
-    methodCollection.registerComposeTask(dynasma::makeStandalone<ComposeAdaptTasks>(
-        ComposeAdaptTasks::SetupParams{.root = root,
-                                       .adaptorAliases =
-                                           {
-                                               {"displayed_GI_samples", "rendered_GI_samples"},
-                                               {"position_view", "position_camera_view"},
-                                               {"fs_target", "fs_display"},
-                                           },
-                                       .desiredOutputs = {ParamSpec{
-                                           "displayed_GI_samples",
-                                           TYPE_INFO<void>,
-                                       }},
-                                       .friendlyName = "Render GI samples"}));
+                        for (auto &sample : samples) {
+                            SimpleTransformation trans;
+                            trans.position = sample.position;
+                            // trans.rotation = glm::quatLookAt(sample.normal, glm::vec3(0, 1, 0));
+                            trans.rotation = glm::quat(glm::vec3(0, 0, 1), sample.normal);
+                            trans.scaling = {1.0f, 1.0f, 1.0f};
 
-    methodCollection.registerCompositorOutput("displayed_GI_samples");
+                            callback(trans.getModelMatrix());
+                        }
+                    },
+                .rasterizing = {
+                    .vertexPositionOutputPropertyName = "position_view",
+                    .modelFormPurpose = Purposes::visual,
+                }}}));
 
-    /*
-    PROBE STRUCTURE VISUALIZATION
-    */
-    {
+        methodCollection.registerComposeTask(dynasma::makeStandalone<ComposeAdaptTasks>(
+            ComposeAdaptTasks::SetupParams{.root = root,
+                                           .adaptorAliases =
+                                               {
+                                                   {"displayed_GI_samples", "rendered_GI_samples"},
+                                                   {"position_view", "position_camera_view"},
+                                                   {"fs_target", "fs_display"},
+                                               },
+                                           .desiredOutputs = {ParamSpec{
+                                               "displayed_GI_samples",
+                                               TYPE_INFO<void>,
+                                           }},
+                                           .friendlyName = "Render GI samples"}));
+
+        methodCollection.registerCompositorOutput("displayed_GI_samples");
+    }
+
+    dynasma::FirmPtr<Model> p_probeModel;
+    { // PROBE VISUALIZATION HELPERS
+
         auto &rend = root.getComponent<Renderer>();
         rend.specifyVertexBuffer(Vitrae::ParamSpec{"probe_subposition", TYPE_INFO<glm::vec3>});
 
@@ -175,7 +179,7 @@ inline void setupGIVisualization(ComponentRoot &root)
             .indexBuffer = buf_indices,
             .friendlyname = "probevis",
         });
-        auto p_probeModel = dynasma::makeStandalone<Model>(Model::FormParams{
+        p_probeModel = dynasma::makeStandalone<Model>(Model::FormParams{
             .root = root,
             .formsByPurpose = {{
                 Purposes::visual,
@@ -186,7 +190,9 @@ inline void setupGIVisualization(ComponentRoot &root)
             }},
             .p_material = p_visualModel->getMaterial(), // temporary solution
         });
+    }
 
+    { // PROBE STRUCTURE VISUALIZATION
         // Register vertex shader
 
         methodCollection.registerShaderTask(
@@ -302,9 +308,10 @@ inline void setupGIVisualization(ComponentRoot &root)
                 .friendlyName = "Render GI probe frames"}));
 
         methodCollection.registerCompositorOutput("displayed_GI_probe_frames");
+    }
 
-        //
-        //
+    { // PROBE REFLECTION VISUALIZATION
+        // Register fragment shader
 
         methodCollection.registerShaderTask(
             root.getComponent<ShaderSnippetKeeper>().new_asset({ShaderSnippet::StringParams{
@@ -417,14 +424,12 @@ inline void setupGIVisualization(ComponentRoot &root)
         methodCollection.registerCompositorOutput("displayed_GI_probe_refl");
     }
 
-    /*
-    PROBE NEIGHBORHOOD VISUALIZATION
-    */
-    {
+    { // PROBE NEIGHBORHOOD VISUALIZATION
+        // generate mesh
+
         auto &rend = root.getComponent<Renderer>();
         rend.specifyVertexBuffer(Vitrae::ParamSpec{"neighline_side", TYPE_INFO<float>});
 
-        // generate mesh
         auto buf_neighline_side = makeBuffer<void, float>(
             root, BufferUsageHint::HOST_INIT | BufferUsageHint::GPU_DRAW, 2, "neighline_sides");
         auto buf_indices = makeBuffer<void, Triangle>(
