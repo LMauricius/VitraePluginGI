@@ -190,9 +190,6 @@ inline void setupGIVisualization(ComponentRoot &root)
             }},
             .p_material = p_visualModel->getMaterial(), // temporary solution
         });
-    }
-
-    { // PROBE STRUCTURE VISUALIZATION
         // Register vertex shader
 
         methodCollection.registerShaderTask(
@@ -210,6 +207,7 @@ inline void setupGIVisualization(ComponentRoot &root)
                     },
                 .outputSpecs =
                     {
+                        {"probe_subposition4world", TYPE_INFO<glm::vec3>},
                         {"probe_position4projection", TYPE_INFO<glm::vec4>},
                         {"probeindf", TYPE_INFO<float>},
                     },
@@ -222,8 +220,9 @@ inline void setupGIVisualization(ComponentRoot &root)
                         gpuProbeRecursions[index4data].childIndex[0] == 0)
                     )
                 ) {
+                    probe_subposition4world = probe_subposition * 0.5 * gpuProbes[index4data].size + gpuProbes[index4data].position;
                     probe_position4projection = mat_proj * mat_view * vec4(
-                        probe_subposition * 0.5 * gpuProbes[index4data].size + gpuProbes[index4data].position,
+                        probe_subposition4world,
                         1.0
                     );
                     probeindf = float(index4data);
@@ -233,6 +232,9 @@ inline void setupGIVisualization(ComponentRoot &root)
             )glsl",
             }}),
             ShaderStageFlag::Vertex);
+    }
+
+    { // PROBE STRUCTURE VISUALIZATION
 
         // Register fragment shader
 
@@ -320,8 +322,11 @@ inline void setupGIVisualization(ComponentRoot &root)
                         {"gi_utilities", TYPE_INFO<void>},
                         {"gi_random", TYPE_INFO<void>},
 
+                        {"camera_position", TYPE_INFO<glm::vec3>},
+
                         StandardParam::normal,
                         {"probe_subposition", TYPE_INFO<glm::vec3>},
+                        {"probe_subposition4world", TYPE_INFO<glm::vec3>},
                         {"gpuProbes", TYPE_INFO<ProbeBufferPtr>},
                         {"gpuReflectionTransfers", TYPE_INFO<ReflectionBufferPtr>},
                         {"gpuNeighborIndices", TYPE_INFO<NeighborIndexBufferPtr>},
@@ -343,6 +348,10 @@ inline void setupGIVisualization(ComponentRoot &root)
                 else if (probe_subposition.y < -0.99) dir = 3;
                 else if (probe_subposition.z > 0.99) dir = 4;
                 else if (probe_subposition.z < -0.99) dir = 5;
+
+                if (dot(DIRECTIONS[dir], probe_subposition4world - camera_position) < 0.0) {
+                    discard;
+                }
 
                 // Detect how much light goes to the neighbours
                 vec4 probeLeaveColor = vec4(0);
