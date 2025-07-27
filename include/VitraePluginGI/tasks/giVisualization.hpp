@@ -39,6 +39,35 @@ inline void setupGIVisualization(ComponentRoot &root)
     MethodCollection &methodCollection = root.getComponent<MethodCollection>();
 
     /*
+    RANDOM
+    */
+    methodCollection.registerComposeTask(
+        dynasma::makeStandalone<ComposeFunction>(ComposeFunction::SetupParams{
+            .inputSpecs = {},
+            .outputSpecs = {{"randSeed", TYPE_INFO<std::uint32_t>}},
+            .filterSpecs = {},
+            .p_function =
+                [&root](const RenderComposeContext &context) {
+                    context.properties.set("randSeed", (std::uint32_t)(std::rand() % 1000));
+                },
+            .friendlyName = "Generate random seed",
+        }));
+
+    methodCollection.registerShaderTask(
+        root.getComponent<ShaderHeaderKeeper>().new_asset({ShaderHeader::StringParams{
+            .inputSpecs = {{"randSeed", TYPE_INFO<std::uint32_t>}},
+            .outputSpecs = {{"gi_random", TYPE_INFO<void>}},
+            .snippet = R"glsl(
+            float rand(vec3 co) {
+                vec2 s = co.xy + co.z + vec2(float(randSeed) / 100.0);
+                return fract(sin(dot(s, vec2(12.9898, 78.233))) * 43758.5453);
+            }
+            )glsl",
+            .friendlyName = "GI constants",
+        }}),
+        ShaderStageFlag::Fragment | ShaderStageFlag::Compute);
+
+    /*
     SAMPLE RENDERING
     */
 
@@ -176,6 +205,7 @@ inline void setupGIVisualization(ComponentRoot &root)
                 .outputSpecs =
                     {
                         {"probe_position4projection", TYPE_INFO<glm::vec4>},
+                        {"probeindf", TYPE_INFO<float>},
                     },
                 .snippet = R"glsl(
                 if (
@@ -190,6 +220,7 @@ inline void setupGIVisualization(ComponentRoot &root)
                         probe_subposition * 0.5 * gpuProbes[index4data].size + gpuProbes[index4data].position,
                         1.0
                     );
+                    probeindf = float(index4data);
                 } else {
                     probe_position4projection = vec4(0.0, 0.0, 0.0, 0.0);
                 }
@@ -279,18 +310,25 @@ inline void setupGIVisualization(ComponentRoot &root)
             root.getComponent<ShaderSnippetKeeper>().new_asset({ShaderSnippet::StringParams{
                 .inputSpecs =
                     {
-                        StandardParam::index4data,
                         {"gi_utilities", TYPE_INFO<void>},
+                        {"gi_random", TYPE_INFO<void>},
+
                         StandardParam::normal,
                         {"probe_subposition", TYPE_INFO<glm::vec3>},
+                        {"gpuProbes", TYPE_INFO<ProbeBufferPtr>},
                         {"gpuReflectionTransfers", TYPE_INFO<ReflectionBufferPtr>},
+                        {"gpuNeighborIndices", TYPE_INFO<NeighborIndexBufferPtr>},
+                        {"gpuNeighborTransfers", TYPE_INFO<NeighborTransferBufferPtr>},
+                        {"gpuNeighborFilters", TYPE_INFO<NeighborFilterBufferPtr>},
                         {"generated_probe_reflections", TYPE_INFO<void>},
+                        {"probeindf", TYPE_INFO<float>},
                     },
                 .outputSpecs =
                     {
                         {"probe_reflColor", TYPE_INFO<glm::vec4>},
                     },
                 .snippet = R"glsl(
+                int probeind = int(probeindf);
                 int dir = 0;
                 if (probe_subposition.x > 0.99) dir = 0;
                 else if (probe_subposition.x < -0.99) dir = 1;
@@ -299,11 +337,41 @@ inline void setupGIVisualization(ComponentRoot &root)
                 else if (probe_subposition.z > 0.99) dir = 4;
                 else if (probe_subposition.z < -0.99) dir = 5;
 
-                probe_reflColor = vec4(0);
-                for (int i = 0; i < 6; i++) {
-                    probe_reflColor += gpuReflectionTransfers[index4data].face[i][dir];
+                // Detect how much light goes to the neighbours
+                vec4 probeLeaveColor = vec4(0);
+                for (uint neighspecind = gpuProbes[probeind].neighborSpecBufStart;
+                     neighspecind <
+                     gpuProbes[probeind].neighborSpecBufStart + gpuProbes[probeind].neighborSpecCount;
+                     neighspecind++) {
+
+                    vec4 probeNeighLeaveColor = vec4(0);
+                    for (int i=0; i < 6; i++) {
+                        probeNeighLeaveColor += gpuNeighborTransfers[neighspecind].source[dir].face[i];
+                    }
+
+                    probeNeighLeaveColor *= gpuNeighborFilters[neighspecind];
+                    probeLeaveColor += probeNeighLeaveColor;
                 }
-                probe_reflColor = vec4(probe_reflColor.rgb, 1.0);
+                float opaqueness = clamp(
+                    1.0 - max(probeLeaveColor.r, max(probeLeaveColor.g, probeLeaveColor.b)),
+                    0.0, 1.0
+                );
+
+                if (rand(vec3(gl_FragCoord.xy, gl_FragCoord.z / gl_FragCoord.w)) > opaqueness) {
+                    discard;
+                }
+
+                // Detect how much light bounces
+                probe_reflColor = vec4(0);
+                if (true) {
+                    for (int i = 0; i < 6; i++) {
+                        probe_reflColor += gpuReflectionTransfers[probeind].face[i][dir];
+                    }
+                    probe_reflColor = vec4(
+                        probe_reflColor.rgb,
+                        1.0
+                    );
+                }
             )glsl",
             }}),
             ShaderStageFlag::Fragment);
@@ -323,7 +391,10 @@ inline void setupGIVisualization(ComponentRoot &root)
                             .vertexPositionOutputPropertyName = "probe_position4projection",
                             .modelFormPurpose = Purposes::visual,
                             .cullingMode = CullingMode::None,
+                            .sourceBlending = BlendingFunction::One,
+                            .destinationBlending = BlendingFunction::Zero,
                             .rasterizingMode = RasterizingMode::DerivationalFillCenters,
+                            .writeDepth = true,
                         },
                 }));
 
