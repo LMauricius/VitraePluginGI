@@ -453,6 +453,104 @@ inline void setupGIVisualization(ComponentRoot &root)
         methodCollection.registerCompositorOutput("displayed_GI_probe_refl");
     }
 
+    { // PROBE FILTERS VISUALIZATION
+        // Register fragment shader
+
+        methodCollection.registerShaderTask(
+            root.getComponent<ShaderSnippetKeeper>().new_asset({ShaderSnippet::StringParams{
+                .inputSpecs =
+                    {
+                        {"gi_utilities", TYPE_INFO<void>},
+                        {"gi_random", TYPE_INFO<void>},
+
+                        {"camera_position", TYPE_INFO<glm::vec3>},
+
+                        StandardParam::normal,
+                        {"probe_subdir", TYPE_INFO<std::uint32_t>},
+                        {"probe_subposition", TYPE_INFO<glm::vec3>},
+                        {"probe_subposition4world", TYPE_INFO<glm::vec3>},
+                        {"gpuProbes", TYPE_INFO<ProbeBufferPtr>},
+                        {"gpuNeighborIndices", TYPE_INFO<NeighborIndexBufferPtr>},
+                        {"gpuNeighborFilters", TYPE_INFO<NeighborFilterBufferPtr>},
+                        {"generated_probe_reflections", TYPE_INFO<void>},
+                        {"probeindf", TYPE_INFO<float>},
+                    },
+                .outputSpecs =
+                    {
+                        {"probe_filterColor", TYPE_INFO<glm::vec4>},
+                    },
+                .snippet = R"glsl(
+                int probeind = int(probeindf);
+
+                if (dot(DIRECTIONS[probe_subdir], probe_subposition4world - camera_position) < 0.0) {
+                    discard;
+                }
+
+                probe_filterColor = vec4(1.0);
+                float maxNeighSim = -1.0;
+
+                // Find the best neighbor
+                for (uint neighspecind = gpuProbes[probeind].neighborSpecBufStart;
+                     neighspecind <
+                     gpuProbes[probeind].neighborSpecBufStart + gpuProbes[probeind].neighborSpecCount;
+                     neighspecind++) {
+                    uint neighInd = gpuNeighborIndices[neighspecind];
+
+                    float neighSim = dot(
+                        normalize(gpuProbes[neighInd].position - gpuProbes[probeind].position),
+                        normalize(probe_subposition)
+                    );
+
+                    if (neighSim > maxNeighSim) {
+                        maxNeighSim = neighSim;
+                        probe_filterColor = gpuNeighborFilters[neighspecind];
+                    }
+                }
+            )glsl",
+            }}),
+            ShaderStageFlag::Fragment);
+
+        // register task
+
+        methodCollection.registerComposeTask(
+            root.getComponent<ComposeIndexRenderKeeper>().new_asset_k(
+                ComposeIndexRender::SetupParams{
+                    .root = root,
+                    .sizeParamName = "gpuProbeCount",
+                    .inputTokenNames = {},
+                    .outputTokenNames = {"rendered_GI_probe_filter"},
+                    .p_dataPointModel = p_probeModel,
+                    .rasterizing =
+                        {
+                            .vertexPositionOutputPropertyName = "probe_position4projection",
+                            .modelFormPurpose = Purposes::visual,
+                            .cullingMode = CullingMode::None,
+                            .sourceBlending = BlendingFunction::Zero,
+                            .destinationBlending = BlendingFunction::SourceColor,
+                            .rasterizingMode = RasterizingMode::DerivationalFillCenters,
+                            .writeDepth = false,
+                        },
+                }));
+
+        methodCollection.registerComposeTask(
+            dynasma::makeStandalone<ComposeAdaptTasks>(ComposeAdaptTasks::SetupParams{
+                .root = root,
+                .adaptorAliases =
+                    {
+                        {"displayed_GI_probe_filter", "rendered_GI_probe_filter"},
+                        {"position_view", "position_camera_view"},
+                        {"fs_target", "fs_display"},
+                        {"phong_shade", "probe_filterColor"},
+                    },
+                .desiredOutputs = {ParamSpec{
+                    "displayed_GI_probe_filter",
+                    TYPE_INFO<void>,
+                }},
+                .friendlyName = "Render GI probe filters"}));
+
+        methodCollection.registerCompositorOutput("displayed_GI_probe_filter");
+    }
+
     { // PROBE NEIGHBORHOOD VISUALIZATION
         // generate mesh
 
