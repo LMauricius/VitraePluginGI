@@ -8,6 +8,7 @@
 #include "Vitrae/Assets/Model.hpp"
 #include "Vitrae/Assets/Shapes/Mesh.hpp"
 #include "Vitrae/Collections/MethodCollection.hpp"
+#include "Vitrae/Data/Blending.hpp"
 #include "Vitrae/Data/BoundingBox.hpp"
 #include "Vitrae/Data/Transformation.hpp"
 #include "Vitrae/Params/Purposes.hpp"
@@ -310,30 +311,27 @@ inline void setupGIVisualization(ComponentRoot &root)
                     .inputTokenNames = {},
                     .outputTokenNames = {"rendered_GI_probe_frames"},
                     .p_dataPointModel = p_probeModel,
-                    .rasterizing =
-                        {
-                            .vertexPositionOutputPropertyName = "probe_position4projection",
-                            .modelFormPurpose = Purposes::visual,
-                            .cullingMode = CullingMode::None,
-                            .rasterizingMode = RasterizingMode::DerivationalTraceEdges,
-                            .lineWidth = 2.5f,
-                        },
+                    .rasterizing{
+                        .vertexPositionOutputPropertyName = "probe_position4projection",
+                        .modelFormPurpose = Purposes::visual,
+                        .rasterizingMode = RasterizingMode::DerivationalTraceEdges,
+                        .cullingMode = CullingMode::None,
+                        .lineWidth = 2.5f,
+                    },
                 }));
 
         methodCollection.registerComposeTask(
             dynasma::makeStandalone<ComposeAdaptTasks>(ComposeAdaptTasks::SetupParams{
                 .root = root,
-                .adaptorAliases =
-                    {
-                        {"displayed_GI_probe_frames", "rendered_GI_probe_frames"},
-                        {"position_view", "position_camera_view"},
-                        {"fs_target", "fs_display"},
-                        {"phong_shade", "probe_absNormalColor"},
-                    },
-                .desiredOutputs = {ParamSpec{
-                    "displayed_GI_probe_frames",
-                    TYPE_INFO<void>,
-                }},
+                .adaptorAliases{
+                    {"displayed_GI_probe_frames", "rendered_GI_probe_frames"},
+                    {"position_view", "position_camera_view"},
+                    {"fs_target", "fs_display"},
+                    {"phong_shade", "probe_absNormalColor"},
+                },
+                .desiredOutputs{
+                    {"displayed_GI_probe_frames", TYPE_INFO<void>},
+                },
                 .friendlyName = "Render GI probe frames"}));
 
         methodCollection.registerCompositorOutput("displayed_GI_probe_frames");
@@ -422,16 +420,14 @@ inline void setupGIVisualization(ComponentRoot &root)
                     .inputTokenNames = {},
                     .outputTokenNames = {"rendered_GI_probe_refl"},
                     .p_dataPointModel = p_probeModel,
-                    .rasterizing =
-                        {
-                            .vertexPositionOutputPropertyName = "probe_position4projection",
-                            .modelFormPurpose = Purposes::visual,
-                            .cullingMode = CullingMode::None,
-                            .sourceBlending = BlendingFunction::One,
-                            .destinationBlending = BlendingFunction::Zero,
-                            .rasterizingMode = RasterizingMode::DerivationalFillCenters,
-                            .writeDepth = true,
-                        },
+                    .rasterizing{
+                        .vertexPositionOutputPropertyName = "probe_position4projection",
+                        .modelFormPurpose = Purposes::visual,
+                        .rasterizingMode = RasterizingMode::DerivationalFillCenters,
+                        .cullingMode = CullingMode::None,
+                        .blending = BlendingCommon::None,
+                        .writeDepth = true,
+                    },
                 }));
 
         methodCollection.registerComposeTask(
@@ -520,32 +516,28 @@ inline void setupGIVisualization(ComponentRoot &root)
                     .inputTokenNames = {},
                     .outputTokenNames = {"rendered_GI_probe_filter"},
                     .p_dataPointModel = p_probeModel,
-                    .rasterizing =
-                        {
-                            .vertexPositionOutputPropertyName = "probe_position4projection",
-                            .modelFormPurpose = Purposes::visual,
-                            .cullingMode = CullingMode::None,
-                            .sourceBlending = BlendingFunction::Zero,
-                            .destinationBlending = BlendingFunction::SourceColor,
-                            .rasterizingMode = RasterizingMode::DerivationalFillCenters,
-                            .writeDepth = false,
-                        },
+                    .rasterizing{
+                        .vertexPositionOutputPropertyName = "probe_position4projection",
+                        .modelFormPurpose = Purposes::visual,
+                        .rasterizingMode = RasterizingMode::DerivationalFillCenters,
+                        .cullingMode = CullingMode::None,
+                        .blending = BlendingCommon::Multiplicative,
+                        .writeDepth = false,
+                    },
                 }));
 
         methodCollection.registerComposeTask(
             dynasma::makeStandalone<ComposeAdaptTasks>(ComposeAdaptTasks::SetupParams{
                 .root = root,
-                .adaptorAliases =
-                    {
-                        {"displayed_GI_probe_filter", "rendered_GI_probe_filter"},
-                        {"position_view", "position_camera_view"},
-                        {"fs_target", "fs_display"},
-                        {"phong_shade", "probe_filterColor"},
-                    },
-                .desiredOutputs = {ParamSpec{
-                    "displayed_GI_probe_filter",
-                    TYPE_INFO<void>,
-                }},
+                .adaptorAliases{
+                    {"displayed_GI_probe_filter", "rendered_GI_probe_filter"},
+                    {"position_view", "position_camera_view"},
+                    {"fs_target", "fs_display"},
+                    {"phong_shade", "probe_filterColor"},
+                },
+                .desiredOutputs{
+                    {"displayed_GI_probe_filter", TYPE_INFO<void>},
+                },
                 .friendlyName = "Render GI probe filters"}));
 
         methodCollection.registerCompositorOutput("displayed_GI_probe_filter");
@@ -681,30 +673,27 @@ inline void setupGIVisualization(ComponentRoot &root)
                     .inputTokenNames = {},
                     .outputTokenNames = {"rendered_GI_neighlines"},
                     .p_dataPointModel = p_neighlineModel,
-                    .rasterizing =
-                        {
-                            .vertexPositionOutputPropertyName = "neighline_position4projection",
-                            .modelFormPurpose = Purposes::visual,
-                            .cullingMode = CullingMode::None,
-                            .rasterizingMode = RasterizingMode::DerivationalTraceEdges,
-                            .lineWidth = 4.0f,
-                        },
+                    .rasterizing{
+                        .vertexPositionOutputPropertyName = "neighline_position4projection",
+                        .modelFormPurpose = Purposes::visual,
+                        .rasterizingMode = RasterizingMode::DerivationalTraceEdges,
+                        .cullingMode = CullingMode::None,
+                        .lineWidth = 4.0f,
+                    },
                 }));
 
         methodCollection.registerComposeTask(
             dynasma::makeStandalone<ComposeAdaptTasks>(ComposeAdaptTasks::SetupParams{
                 .root = root,
-                .adaptorAliases =
-                    {
-                        {"displayed_GI_neighlines", "rendered_GI_neighlines"},
-                        {"position_view", "position_camera_view"},
-                        {"fs_target", "fs_display"},
-                        {"phong_shade", "neighline_color"},
-                    },
-                .desiredOutputs = {ParamSpec{
-                    "displayed_GI_neighlines",
-                    TYPE_INFO<void>,
-                }},
+                .adaptorAliases{
+                    {"displayed_GI_neighlines", "rendered_GI_neighlines"},
+                    {"position_view", "position_camera_view"},
+                    {"fs_target", "fs_display"},
+                    {"phong_shade", "neighline_color"},
+                },
+                .desiredOutputs{
+                    {"displayed_GI_neighlines", TYPE_INFO<void>},
+                },
                 .friendlyName = "Render GI neighlines"}));
 
         methodCollection.registerCompositorOutput("displayed_GI_neighlines");
