@@ -7,7 +7,7 @@ enable_testing()
 file(GLOB_RECURSE SrcFiles CONFIGURE_DEPENDS src/*.cpp)
 file(GLOB_RECURSE HeaderFiles CONFIGURE_DEPENDS include/*.h include/*.hpp)
 
-add_library(VitraePluginGI SHARED ${SrcFiles} ${HeaderFiles})
+add_library(VitraePluginGI ${VITRAE_LINKING} ${SrcFiles} ${HeaderFiles})
 target_compile_features(VitraePluginGI PUBLIC cxx_std_20)
 target_include_directories(VitraePluginGI PUBLIC include)
 
